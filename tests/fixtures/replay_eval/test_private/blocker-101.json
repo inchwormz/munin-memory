@@ -1,0 +1,15 @@
+{
+  "blocker_oracle_id": "blocker-101",
+  "case_id": "case-101",
+  "summary": "The replay/eval harness is only partially scaffolded.",
+  "severity": "medium",
+  "acceptable_paraphrases": [
+    "The evaluation harness is incomplete",
+    "Replay scaffolding is not finished yet"
+  ],
+  "partial_credit_rubric": "Must identify the missing harness work as a blocker to safe cutover.",
+  "evidence_refs": [
+    "proof-101"
+  ],
+  "oracle_version": "v1"
+}

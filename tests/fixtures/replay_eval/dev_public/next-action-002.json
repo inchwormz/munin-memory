@@ -1,0 +1,14 @@
+{
+  "next_action_oracle_id": "next-action-002",
+  "case_id": "case-002",
+  "exact_action": "Add the replay-eval run command and write JSON report output.",
+  "acceptable_alternatives": [
+    "Expose replay eval scoring on the CLI and persist the report",
+    "Wire a replay-eval run surface that can emit a saved report"
+  ],
+  "actionability_rubric": "The action must be directly executable and stay inside the replay/eval runner tranche.",
+  "evidence_refs": [
+    "proof-002"
+  ],
+  "oracle_version": "v1"
+}

@@ -1,0 +1,10 @@
+{
+  "forbidden_state_oracle_id": "forbidden-301",
+  "case_id": "case-301",
+  "forbidden_kind": "premature_enforcement",
+  "description": "The system must not turn trust observations into enforcement or packet blocking in this tranche.",
+  "evidence_refs": [
+    "proof-301"
+  ],
+  "oracle_version": "v1"
+}

@@ -1,0 +1,15 @@
+{
+  "route": "brain",
+  "source_status": "live",
+  "triggers": [
+    "what was I doing?",
+    "where was I?",
+    "current session?",
+    "show Session Brain",
+    "what is the current ask?"
+  ],
+  "negative_triggers": [
+    "resume this project",
+    "what keeps going wrong?"
+  ]
+}

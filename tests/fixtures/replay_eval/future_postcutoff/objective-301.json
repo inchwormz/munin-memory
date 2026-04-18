@@ -1,0 +1,15 @@
+{
+  "objective_oracle_id": "objective-301",
+  "case_id": "case-301",
+  "exact_answer": "Harden the trust observe-only lane without enabling enforcement.",
+  "acceptable_paraphrases": [
+    "Stabilize the trust observe-only lane without turning on enforcement",
+    "Make the trust observe-only path less noisy while keeping it non-enforcing"
+  ],
+  "partial_credit_rubric": "Goal must clearly keep the work in the trust observe-only lane and avoid policy enforcement.",
+  "evidence_refs": [
+    "proof-301"
+  ],
+  "adjudication_notes": "Seed objective oracle for intent-memory recovery.",
+  "oracle_version": "v1"
+}

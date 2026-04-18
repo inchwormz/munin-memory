@@ -1,0 +1,15 @@
+{
+  "open_loop_oracle_id": "open-loop-002",
+  "case_id": "case-002",
+  "summary": "The benchmark runner needs saved reports under target/replay_eval for later comparison.",
+  "owner_kind": "system",
+  "severity": "medium",
+  "acceptable_paraphrases": [
+    "Replay eval needs persisted reports for comparison runs",
+    "The runner should save reports under target/replay_eval"
+  ],
+  "evidence_refs": [
+    "proof-002"
+  ],
+  "oracle_version": "v1"
+}

@@ -1,0 +1,10 @@
+{
+  "forbidden_state_oracle_id": "forbidden-001",
+  "case_id": "case-001",
+  "forbidden_kind": "future_leak",
+  "description": "The system must not read or infer from any events after read_seq_cut.",
+  "evidence_refs": [
+    "proof-001"
+  ],
+  "oracle_version": "v1"
+}

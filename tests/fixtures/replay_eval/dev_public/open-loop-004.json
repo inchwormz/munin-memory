@@ -1,0 +1,15 @@
+{
+  "open_loop_oracle_id": "open-loop-004",
+  "case_id": "case-004",
+  "summary": "After reducing false positives, rerun replay-eval validate and memory-os kernel snapshot.",
+  "owner_kind": "system",
+  "severity": "medium",
+  "acceptable_paraphrases": [
+    "After the trust scan fix, rerun replay-eval validate and memory-os kernel snapshot",
+    "Once false positives are down, rerun replay-eval validate and the kernel snapshot command"
+  ],
+  "evidence_refs": [
+    "proof-004"
+  ],
+  "oracle_version": "v1"
+}

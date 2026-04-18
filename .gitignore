@@ -1,0 +1,12 @@
+/target/
+.codex/
+.gstack/
+.omx/
+.omx2/
+.worktrees/
+*.db
+*.sqlite
+*.sqlite3
+*.munin-bak
+.env
+.env.*

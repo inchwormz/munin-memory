@@ -1,0 +1,14 @@
+{
+  "next_action_oracle_id": "next-action-003",
+  "case_id": "case-003",
+  "exact_action": "Implement run_validate and add a CLI parse test for replay-eval run.",
+  "acceptable_alternatives": [
+    "Define the validate entrypoint and cover the runner CLI in tests",
+    "Add run_validate plus a replay-eval run parse test"
+  ],
+  "actionability_rubric": "The action must directly repair the CLI contract and stay inside the replay/eval tranche.",
+  "evidence_refs": [
+    "proof-003"
+  ],
+  "oracle_version": "v1"
+}

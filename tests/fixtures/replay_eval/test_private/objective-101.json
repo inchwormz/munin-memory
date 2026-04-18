@@ -1,0 +1,15 @@
+{
+  "objective_oracle_id": "objective-101",
+  "case_id": "case-101",
+  "exact_answer": "Expand the replay/eval corpus after loader support is stable.",
+  "acceptable_paraphrases": [
+    "Add private oracle fixtures after the replay loader path is stable",
+    "Grow the replay corpus once fixture loading is working"
+  ],
+  "partial_credit_rubric": "Goal must clearly identify the same project and resume lane.",
+  "evidence_refs": [
+    "proof-101"
+  ],
+  "adjudication_notes": "Seed objective oracle fixture for replay/eval harness.",
+  "oracle_version": "v1"
+}

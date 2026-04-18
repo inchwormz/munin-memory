@@ -1,0 +1,48 @@
+{
+  "case_id": "case-101",
+  "visible_state_ref": "visible-state-101",
+  "scenario_family": "hot-resume",
+  "difficulty": "medium",
+  "corpus_split": "test-private",
+  "source_kind": "privately-authored",
+  "visible_start_seq": 10,
+  "visible_end_seq": 42,
+  "read_seq_cut": 42,
+  "hidden_target_window": {
+    "start_seq": 43,
+    "end_seq": 50
+  },
+  "scope": {
+    "repo_id": "context",
+    "branch_id": "main",
+    "worktree_id": "default",
+    "runtime_profile": "codex-default",
+    "os_profile": "windows"
+  },
+  "ground_truth_refs": {
+    "objective_oracle_id": "objective-101",
+    "blocker_oracle_ids": [
+      "blocker-101"
+    ],
+    "next_action_oracle_id": "next-action-101",
+    "open_loop_oracle_ids": [
+      "open-loop-101"
+    ],
+    "forbidden_state_oracle_ids": [
+      "forbidden-101"
+    ]
+  },
+  "baseline_inputs": {
+    "checkpoint_visible": true,
+    "recall_archive_visible": true,
+    "private_gold_hidden": true
+  },
+  "contamination_metadata": {
+    "publicly_available": false,
+    "postcutoff": true,
+    "canary_ids": [
+      "canary-101"
+    ]
+  },
+  "notes": "Private replay fixture cloned from the hot-resume seed and kept out of the public dev split."
+}

@@ -1,0 +1,28 @@
+{
+  "visible_state_id": "visible-state-301",
+  "case_id": "case-301",
+  "objective_hint": "Harden the trust observe-only lane without enabling enforcement.",
+  "checkpoint_summary": "Trust observe-only is noisy because doc prose is still being classified as secrets.",
+  "active_blockers": [
+    {
+      "summary": "Bare secret words in prose still force must_not_packetize",
+      "severity": "medium",
+      "owner_kind": null
+    }
+  ],
+  "active_open_loops": [],
+  "suggested_next_actions": [
+    "Refine the trust scan so prose mentions of secret/password do not trip the hard packetization gate."
+  ],
+  "active_files": [
+    "src/core/tracking.rs"
+  ],
+  "recent_failures": [
+    "The observe-only trust scan marks docs with the word secret as must_not_packetize."
+  ],
+  "constraints": [
+    "After reducing false positives, rerun replay-eval validate and memory-os kernel snapshot.",
+    "Keep trust observe-only until verification semantics are hardened."
+  ],
+  "notes": "Intent-memory seed where the important follow-up is encoded as a constraint instead of an explicit open loop."
+}

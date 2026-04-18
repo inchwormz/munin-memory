@@ -1,0 +1,48 @@
+{
+  "case_id": "case-301",
+  "visible_state_ref": "visible-state-301",
+  "scenario_family": "stale-memory",
+  "difficulty": "hard",
+  "corpus_split": "future-postcutoff",
+  "source_kind": "postcutoff-capture",
+  "visible_start_seq": 240,
+  "visible_end_seq": 286,
+  "read_seq_cut": 286,
+  "hidden_target_window": {
+    "start_seq": 287,
+    "end_seq": 296
+  },
+  "scope": {
+    "repo_id": "context",
+    "branch_id": "main",
+    "worktree_id": "default",
+    "runtime_profile": "codex-default",
+    "os_profile": "windows"
+  },
+  "ground_truth_refs": {
+    "objective_oracle_id": "objective-301",
+    "blocker_oracle_ids": [
+      "blocker-301"
+    ],
+    "next_action_oracle_id": "next-action-301",
+    "open_loop_oracle_ids": [
+      "open-loop-301"
+    ],
+    "forbidden_state_oracle_ids": [
+      "forbidden-301"
+    ]
+  },
+  "baseline_inputs": {
+    "checkpoint_visible": true,
+    "recall_archive_visible": true,
+    "private_gold_hidden": true
+  },
+  "contamination_metadata": {
+    "publicly_available": false,
+    "postcutoff": true,
+    "canary_ids": [
+      "canary-301"
+    ]
+  },
+  "notes": "Future postcutoff replay fixture cloned from the stale-memory seed to keep the postcutoff split benchmark-visible."
+}

@@ -1,0 +1,14 @@
+{
+  "objective_oracle_id": "objective-201",
+  "case_id": "case-201",
+  "exact_answer": "Repair the replay/eval CLI contract before widening the harness.",
+  "acceptable_paraphrases": [
+    "Restore replay-eval CLI correctness before adding more scope"
+  ],
+  "partial_credit_rubric": "The goal must stay on compile parity and runner correctness, not broader kernel work.",
+  "evidence_refs": [
+    "proof-201"
+  ],
+  "adjudication_notes": "Seed objective for interrupted debugging recovery.",
+  "oracle_version": "v1"
+}

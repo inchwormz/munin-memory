@@ -1,0 +1,48 @@
+{
+  "case_id": "case-003",
+  "visible_state_ref": "visible-state-003",
+  "scenario_family": "interrupted-debugging",
+  "difficulty": "hard",
+  "corpus_split": "dev-public",
+  "source_kind": "recorded-session",
+  "visible_start_seq": 160,
+  "visible_end_seq": 210,
+  "read_seq_cut": 210,
+  "hidden_target_window": {
+    "start_seq": 211,
+    "end_seq": 220
+  },
+  "scope": {
+    "repo_id": "context",
+    "branch_id": "main",
+    "worktree_id": "default",
+    "runtime_profile": "codex-default",
+    "os_profile": "windows"
+  },
+  "ground_truth_refs": {
+    "objective_oracle_id": "objective-003",
+    "blocker_oracle_ids": [
+      "blocker-003"
+    ],
+    "next_action_oracle_id": "next-action-003",
+    "open_loop_oracle_ids": [
+      "open-loop-003"
+    ],
+    "forbidden_state_oracle_ids": [
+      "forbidden-003"
+    ]
+  },
+  "baseline_inputs": {
+    "checkpoint_visible": true,
+    "recall_archive_visible": true,
+    "private_gold_hidden": true
+  },
+  "contamination_metadata": {
+    "publicly_available": false,
+    "postcutoff": true,
+    "canary_ids": [
+      "canary-003"
+    ]
+  },
+  "notes": "Seed fixture for interrupted debugging and compile parity recovery."
+}

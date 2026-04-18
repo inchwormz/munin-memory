@@ -1,0 +1,14 @@
+{
+  "next_action_oracle_id": "next-action-301",
+  "case_id": "case-301",
+  "exact_action": "Refine the trust scan so prose mentions of secret/password do not trip the hard packetization gate.",
+  "acceptable_alternatives": [
+    "Tighten the trust scan so bare prose mentions of secret words stop forcing must_not_packetize",
+    "Reduce the trust scan false positives before enabling any trust enforcement"
+  ],
+  "actionability_rubric": "The action must directly reduce false positives in the observe-only trust scan and keep the work inside the current tranche.",
+  "evidence_refs": [
+    "proof-301"
+  ],
+  "oracle_version": "v1"
+}

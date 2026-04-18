@@ -1,0 +1,10 @@
+{
+  "forbidden_state_oracle_id": "forbidden-002",
+  "case_id": "case-002",
+  "forbidden_kind": "future_leak",
+  "description": "The system must not infer from events after read_seq_cut while scoring branch-switch cases.",
+  "evidence_refs": [
+    "proof-002"
+  ],
+  "oracle_version": "v1"
+}

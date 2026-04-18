@@ -1,0 +1,15 @@
+{
+  "route": "prove",
+  "source_status": null,
+  "triggers": [
+    "is this memory proven?",
+    "show proof status",
+    "what is the promotion state?",
+    "check the proof gate",
+    "can I trust this promoted memory?"
+  ],
+  "negative_triggers": [
+    "is Munin healthy?",
+    "what was I doing?"
+  ]
+}

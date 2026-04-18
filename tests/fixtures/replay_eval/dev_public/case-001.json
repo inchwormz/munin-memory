@@ -1,0 +1,48 @@
+{
+  "case_id": "case-001",
+  "visible_state_ref": "visible-state-001",
+  "scenario_family": "hot-resume",
+  "difficulty": "medium",
+  "corpus_split": "dev-public",
+  "source_kind": "recorded-session",
+  "visible_start_seq": 10,
+  "visible_end_seq": 42,
+  "read_seq_cut": 42,
+  "hidden_target_window": {
+    "start_seq": 43,
+    "end_seq": 50
+  },
+  "scope": {
+    "repo_id": "context",
+    "branch_id": "main",
+    "worktree_id": "default",
+    "runtime_profile": "codex-default",
+    "os_profile": "windows"
+  },
+  "ground_truth_refs": {
+    "objective_oracle_id": "objective-001",
+    "blocker_oracle_ids": [
+      "blocker-001"
+    ],
+    "next_action_oracle_id": "next-action-001",
+    "open_loop_oracle_ids": [
+      "open-loop-001"
+    ],
+    "forbidden_state_oracle_ids": [
+      "forbidden-001"
+    ]
+  },
+  "baseline_inputs": {
+    "checkpoint_visible": true,
+    "recall_archive_visible": true,
+    "private_gold_hidden": true
+  },
+  "contamination_metadata": {
+    "publicly_available": false,
+    "postcutoff": true,
+    "canary_ids": [
+      "canary-001"
+    ]
+  },
+  "notes": "seed fixture"
+}

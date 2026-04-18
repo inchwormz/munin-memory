@@ -1,0 +1,15 @@
+{
+  "route": "recall",
+  "source_status": null,
+  "triggers": [
+    "remember resolver decisions",
+    "recall prior work about Munin",
+    "what did we decide about skills?",
+    "show previous project context",
+    "what happened before about access layer?"
+  ],
+  "negative_triggers": [
+    "current session?",
+    "what should I do next?"
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "route": "hygiene",
+  "source_status": null,
+  "triggers": [
+    "memory hygiene",
+    "prune claude.md",
+    "prune agents.md",
+    "clean AGENTS.md",
+    "dedupe memory stores"
+  ],
+  "negative_triggers": [
+    "is Munin healthy?",
+    "show proof gate"
+  ]
+}

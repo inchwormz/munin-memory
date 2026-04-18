@@ -1,0 +1,15 @@
+{
+  "route": "resume",
+  "source_status": null,
+  "triggers": [
+    "resume this project",
+    "start work here",
+    "open the startup brief",
+    "pick up the handoff",
+    "continue project"
+  ],
+  "negative_triggers": [
+    "what keeps going wrong?",
+    "what should I do next?"
+  ]
+}

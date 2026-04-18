@@ -1,0 +1,15 @@
+{
+  "blocker_oracle_id": "blocker-004",
+  "case_id": "case-004",
+  "summary": "Bare secret words in prose still force must_not_packetize",
+  "severity": "medium",
+  "acceptable_paraphrases": [
+    "The trust scan still over-flags prose mentions of secret words",
+    "Documentation text with secret/password is still being treated like sensitive payload"
+  ],
+  "partial_credit_rubric": "The blocker must identify the false-positive trust scan behavior, not just mention trust in general.",
+  "evidence_refs": [
+    "proof-004"
+  ],
+  "oracle_version": "v1"
+}

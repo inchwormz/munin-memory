@@ -1,0 +1,15 @@
+{
+  "route": "doctor",
+  "source_status": null,
+  "triggers": [
+    "is Munin healthy?",
+    "run doctor",
+    "is the corpus stale?",
+    "is the database readable?",
+    "is this release ready?"
+  ],
+  "negative_triggers": [
+    "show proof gate",
+    "what should I do next?"
+  ]
+}

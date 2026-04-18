@@ -1,0 +1,15 @@
+{
+  "route": "friction",
+  "source_status": null,
+  "triggers": [
+    "what keeps going wrong?",
+    "show repeated correction patterns",
+    "what friction do I have?",
+    "what do agents keep repeating?",
+    "which mistakes are repeated?"
+  ],
+  "negative_triggers": [
+    "what should I do next?",
+    "remember prior resolver work"
+  ]
+}

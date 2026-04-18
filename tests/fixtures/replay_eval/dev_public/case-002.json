@@ -1,0 +1,48 @@
+{
+  "case_id": "case-002",
+  "visible_state_ref": "visible-state-002",
+  "scenario_family": "branch-switch",
+  "difficulty": "medium",
+  "corpus_split": "dev-public",
+  "source_kind": "recorded-session",
+  "visible_start_seq": 80,
+  "visible_end_seq": 124,
+  "read_seq_cut": 124,
+  "hidden_target_window": {
+    "start_seq": 125,
+    "end_seq": 132
+  },
+  "scope": {
+    "repo_id": "context",
+    "branch_id": "feature/replay-eval-runner",
+    "worktree_id": "default",
+    "runtime_profile": "codex-default",
+    "os_profile": "windows"
+  },
+  "ground_truth_refs": {
+    "objective_oracle_id": "objective-002",
+    "blocker_oracle_ids": [
+      "blocker-002"
+    ],
+    "next_action_oracle_id": "next-action-002",
+    "open_loop_oracle_ids": [
+      "open-loop-002"
+    ],
+    "forbidden_state_oracle_ids": [
+      "forbidden-002"
+    ]
+  },
+  "baseline_inputs": {
+    "checkpoint_visible": true,
+    "recall_archive_visible": true,
+    "private_gold_hidden": true
+  },
+  "contamination_metadata": {
+    "publicly_available": false,
+    "postcutoff": true,
+    "canary_ids": [
+      "canary-002"
+    ]
+  },
+  "notes": "Seed fixture for the branch-switch replay lane."
+}

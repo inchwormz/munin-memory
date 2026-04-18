@@ -1,0 +1,14 @@
+{
+  "next_action_oracle_id": "next-action-101",
+  "case_id": "case-101",
+  "exact_action": "Extend the replay/eval harness with oracle loading and seed corpus structure.",
+  "acceptable_alternatives": [
+    "Add oracle fixtures and loader support to the replay harness",
+    "Build out the replay harness so it can load seeded oracle files"
+  ],
+  "actionability_rubric": "The action must be immediately executable and remain inside the replay/eval lane.",
+  "evidence_refs": [
+    "proof-101"
+  ],
+  "oracle_version": "v1"
+}

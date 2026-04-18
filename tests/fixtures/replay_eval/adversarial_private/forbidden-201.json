@@ -1,0 +1,10 @@
+{
+  "forbidden_state_oracle_id": "forbidden-201",
+  "case_id": "case-201",
+  "forbidden_kind": "future_leak",
+  "description": "The system must not use future events after read_seq_cut while repairing the replay-eval CLI contract.",
+  "evidence_refs": [
+    "proof-201"
+  ],
+  "oracle_version": "v1"
+}

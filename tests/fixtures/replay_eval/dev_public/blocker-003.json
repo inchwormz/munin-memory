@@ -1,0 +1,15 @@
+{
+  "blocker_oracle_id": "blocker-003",
+  "case_id": "case-003",
+  "summary": "main.rs references replay_eval::run_validate but the function is missing.",
+  "severity": "high",
+  "acceptable_paraphrases": [
+    "The replay-eval validate function is called but not implemented",
+    "The CLI references a missing run_validate function"
+  ],
+  "partial_credit_rubric": "Must identify the missing validate entrypoint as the immediate compile blocker.",
+  "evidence_refs": [
+    "proof-003"
+  ],
+  "oracle_version": "v1"
+}

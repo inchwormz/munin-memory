@@ -1,0 +1,15 @@
+{
+  "objective_oracle_id": "objective-001",
+  "case_id": "case-001",
+  "exact_answer": "Resume the context memory work",
+  "acceptable_paraphrases": [
+    "Continue the context memory work",
+    "Pick up the context memory implementation again"
+  ],
+  "partial_credit_rubric": "Goal must clearly identify the same project and resume lane.",
+  "evidence_refs": [
+    "proof-001"
+  ],
+  "adjudication_notes": "Seed objective oracle fixture for replay/eval harness.",
+  "oracle_version": "v1"
+}

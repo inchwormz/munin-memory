@@ -1,0 +1,15 @@
+{
+  "open_loop_oracle_id": "open-loop-201",
+  "case_id": "case-201",
+  "summary": "The seed corpus still needs multiple replay cases and oracle files before benchmark slices are credible.",
+  "owner_kind": "system",
+  "severity": "medium",
+  "acceptable_paraphrases": [
+    "The replay corpus needs more seeded cases",
+    "Benchmark credibility still depends on expanding the seed corpus"
+  ],
+  "evidence_refs": [
+    "proof-201"
+  ],
+  "oracle_version": "v1"
+}

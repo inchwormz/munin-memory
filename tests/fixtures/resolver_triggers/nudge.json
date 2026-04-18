@@ -1,0 +1,15 @@
+{
+  "route": "nudge",
+  "source_status": null,
+  "triggers": [
+    "what should I do next?",
+    "give me a nudge",
+    "what is the strategy move?",
+    "where should I focus?",
+    "what now?"
+  ],
+  "negative_triggers": [
+    "what keeps going wrong?",
+    "is Munin healthy?"
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "open_loop_oracle_id": "open-loop-101",
+  "case_id": "case-101",
+  "summary": "The replay/eval corpus needs more than one real replay case before benchmarking is meaningful.",
+  "owner_kind": "system",
+  "severity": "medium",
+  "acceptable_paraphrases": [
+    "The seed corpus needs expansion",
+    "One replay case is not enough for a credible benchmark"
+  ],
+  "evidence_refs": [
+    "proof-101"
+  ],
+  "oracle_version": "v1"
+}

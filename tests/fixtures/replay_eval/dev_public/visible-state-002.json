@@ -1,0 +1,35 @@
+{
+  "visible_state_id": "visible-state-002",
+  "case_id": "case-002",
+  "objective_hint": "Complete the replay eval runner work on this branch",
+  "checkpoint_summary": "The branch-switch lane is blocked on exposing scored replay runs through the CLI.",
+  "active_blockers": [
+    {
+      "summary": "Replay eval has validate only and no run command",
+      "severity": "medium",
+      "owner_kind": null
+    }
+  ],
+  "active_open_loops": [
+    {
+      "summary": "Replay eval needs persisted reports for comparison runs",
+      "severity": "medium",
+      "owner_kind": "system"
+    }
+  ],
+  "suggested_next_actions": [
+    "Add the replay-eval run command and write JSON report output."
+  ],
+  "active_files": [
+    "src/main.rs",
+    "src/analytics/replay_eval.rs"
+  ],
+  "recent_failures": [
+    "Validation exists, but the scored runner is not surfaced through the CLI."
+  ],
+  "constraints": [
+    "Keep the replay harness additive.",
+    "Do not widen the read model."
+  ],
+  "notes": "Visible-state seed for the branch-switch replay case."
+}

@@ -1,0 +1,15 @@
+{
+  "objective_oracle_id": "objective-002",
+  "case_id": "case-002",
+  "exact_answer": "Finish the replay/eval runner tranche on the feature branch.",
+  "acceptable_paraphrases": [
+    "Complete the replay eval runner work on this branch",
+    "Keep building the replay-eval runner on the feature branch"
+  ],
+  "partial_credit_rubric": "The goal must stay on the replay/eval runner lane and acknowledge the active branch context.",
+  "evidence_refs": [
+    "proof-002"
+  ],
+  "adjudication_notes": "Seed objective for branch-switch continuity.",
+  "oracle_version": "v1"
+}

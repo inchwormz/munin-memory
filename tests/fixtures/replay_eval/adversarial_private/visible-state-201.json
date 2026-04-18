@@ -1,0 +1,34 @@
+{
+  "visible_state_id": "visible-state-201",
+  "case_id": "case-201",
+  "objective_hint": "Fix the replay eval CLI before expanding the harness",
+  "checkpoint_summary": "Interrupted debugging left the CLI referencing a missing validate entrypoint.",
+  "active_blockers": [
+    {
+      "summary": "The replay-eval validate function is called but not implemented",
+      "severity": "high",
+      "owner_kind": null
+    }
+  ],
+  "active_open_loops": [
+    {
+      "summary": "The replay corpus needs more seeded cases",
+      "severity": "medium",
+      "owner_kind": "system"
+    }
+  ],
+  "suggested_next_actions": [
+    "Implement run_validate and add a CLI parse test for replay-eval run."
+  ],
+  "active_files": [
+    "src/main.rs",
+    "src/analytics/replay_eval.rs"
+  ],
+  "recent_failures": [
+    "main.rs referenced replay_eval::run_validate before the function existed."
+  ],
+  "constraints": [
+    "Fix the compile blocker before adding more harness surface."
+  ],
+  "notes": "Visible-state seed for the interrupted-debugging replay case."
+}

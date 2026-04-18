@@ -1,0 +1,36 @@
+{
+  "visible_state_id": "visible-state-001",
+  "case_id": "case-001",
+  "objective_hint": "Resume the context memory work",
+  "checkpoint_summary": "Resume the replay/eval lane after the journal scaffold landed.",
+  "active_blockers": [
+    {
+      "summary": "Replay scaffolding is not finished yet",
+      "severity": "medium",
+      "owner_kind": null
+    }
+  ],
+  "active_open_loops": [
+    {
+      "summary": "The seed corpus needs expansion",
+      "severity": "medium",
+      "owner_kind": "system"
+    }
+  ],
+  "suggested_next_actions": [
+    "Add oracle fixtures and loader support to the replay harness",
+    "Expand the seed corpus after the loader path is stable"
+  ],
+  "active_files": [
+    "src/analytics/replay_eval.rs",
+    "tests/fixtures/replay_eval/dev_public"
+  ],
+  "recent_failures": [
+    "Replay runner scaffolding is still incomplete."
+  ],
+  "constraints": [
+    "Stay inside the replay/eval lane.",
+    "Do not cut over the runtime path yet."
+  ],
+  "notes": "Visible-state seed for the current-context and tiny-core replay baselines."
+}

@@ -1,0 +1,15 @@
+{
+  "blocker_oracle_id": "blocker-002",
+  "case_id": "case-002",
+  "summary": "The CLI can validate the replay corpus but cannot run scored reports yet.",
+  "severity": "medium",
+  "acceptable_paraphrases": [
+    "Replay eval has validate only and no run command",
+    "The scorer is not exposed through the CLI yet"
+  ],
+  "partial_credit_rubric": "Must identify the missing run surface as the blocker to benchmark execution.",
+  "evidence_refs": [
+    "proof-002"
+  ],
+  "oracle_version": "v1"
+}

@@ -1,0 +1,48 @@
+{
+  "case_id": "case-004",
+  "visible_state_ref": "visible-state-004",
+  "scenario_family": "stale-memory",
+  "difficulty": "hard",
+  "corpus_split": "dev-public",
+  "source_kind": "recorded-session",
+  "visible_start_seq": 240,
+  "visible_end_seq": 286,
+  "read_seq_cut": 286,
+  "hidden_target_window": {
+    "start_seq": 287,
+    "end_seq": 296
+  },
+  "scope": {
+    "repo_id": "context",
+    "branch_id": "main",
+    "worktree_id": "default",
+    "runtime_profile": "codex-default",
+    "os_profile": "windows"
+  },
+  "ground_truth_refs": {
+    "objective_oracle_id": "objective-004",
+    "blocker_oracle_ids": [
+      "blocker-004"
+    ],
+    "next_action_oracle_id": "next-action-004",
+    "open_loop_oracle_ids": [
+      "open-loop-004"
+    ],
+    "forbidden_state_oracle_ids": [
+      "forbidden-004"
+    ]
+  },
+  "baseline_inputs": {
+    "checkpoint_visible": true,
+    "recall_archive_visible": true,
+    "private_gold_hidden": true
+  },
+  "contamination_metadata": {
+    "publicly_available": false,
+    "postcutoff": true,
+    "canary_ids": [
+      "canary-004"
+    ]
+  },
+  "notes": "Seed fixture for intent-memory recovery from constraints when explicit open-loop state is missing."
+}
