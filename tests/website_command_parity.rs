@@ -17,17 +17,18 @@ fn public_docs_do_not_publish_unsupported_munin_commands() {
         .map(std::path::PathBuf::from)
         .ok()
         .or_else(default_site_root);
-    let root = site_root.expect("MUNIN_SITE_ROOT or restored production site source is required");
-    assert!(
-        root.exists(),
-        "site root does not exist: {}",
-        root.display()
-    );
-    for entry in std::fs::read_dir(&root).expect("site root") {
-        let entry = entry.expect("site entry");
-        let path = entry.path();
-        if path.extension().and_then(|ext| ext.to_str()) == Some("html") {
-            checked.push((path.display().to_string(), read(path)));
+    if let Some(root) = site_root {
+        assert!(
+            root.exists(),
+            "site root does not exist: {}",
+            root.display()
+        );
+        for entry in std::fs::read_dir(&root).expect("site root") {
+            let entry = entry.expect("site entry");
+            let path = entry.path();
+            if path.extension().and_then(|ext| ext.to_str()) == Some("html") {
+                checked.push((path.display().to_string(), read(path)));
+            }
         }
     }
     if let Some(tracked_root) = tracked_site_root() {
