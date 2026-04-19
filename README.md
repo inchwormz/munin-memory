@@ -19,20 +19,25 @@ Munin is open source under the Apache 2.0 license.
 
 ## What Munin Does
 
-Munin has four local layers:
+Munin has five local layers:
 
-1. **Session ingestion** reads first-class Claude and Codex sessions: prompts,
-assistant turns, shell commands, outcomes, corrections, working directories, and
-timestamps. Claude subagent internals are excluded by design.
+1. **Session ingestion** ingests all first-class Claude and Codex sessions (2000 verified in 48 seconds): prompts,
+assistant turns, shell commands, outcomes, corrections, working directories, and timestamps.
 2. **Memory compilation** converts those sessions into a local Memory OS:
-evidence-backed facts, active projects, continuity commitments, open loops,
+evidence-backed facts, active projects, strategic plans, continuity commitments, open loops,
 repeated friction, command outcomes, strategy context, and next steps.
 3. **Strategy and proactivity** turn memory into concrete tasks. `munin nudge`
 now combines strategy red/yellow items with continuity work from previous
-completed sessions, active projects, and verified incomplete tasks.
+completed sessions, active projects, and verified incomplete tasks. A window is spawned automatically, 
+each morning and starts working on solving user frustrations in the dev environment with rules, hooks,
+md notes and starts inferring strategic tasks to help you reach your project goals.
 4. **Agent access** installs Claude skills, Claude slash commands, Codex skills,
-and a Codex plugin skill bundle so agents can query compiled memory instead of
-trawling raw transcripts.
+so agents can query compiled memory instead of trawling raw transcripts.
+5. **Munin brain** is an actively compiled in-session memory which gives the agent oversight,
+into who you are, what you care about, your strategy and the asks from this current session
+so nothing gets lost in long context windows.
+
+
 
 No hosted service is required. The compiled state stays on the machine running
 Munin.
