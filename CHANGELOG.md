@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.1-beta-2 - 2026-04-20
+
+### Changed
+
+- README install flow now starts from the crates.io package and follows with `munin install --force` plus resolver validation.
+
 ## 0.5.1-beta-1 - 2026-04-20
 
 ### Fixed

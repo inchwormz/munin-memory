@@ -2,7 +2,7 @@
 
 Local memory system for agent-driven development.
 
-Current testing build: `v0.5.1-beta-1`.
+Current testing build: `v0.5.1-beta-2`.
 
 ## What It Is
 
@@ -76,19 +76,32 @@ The hosted product, when built, lives in a separate private repository and is no
 
 ## Local Install
 
-Install from the repository checkout during the testing phase:
-
-```powershell
-cargo install --path . --force
-```
-
-After the `munin-memory` crate is published for this testing build, the install command is:
+Install the testing build from crates.io:
 
 ```powershell
 cargo install munin-memory
 ```
 
+Then install or refresh the local Codex and Claude skills:
+
+```powershell
+munin install --force
+munin install --check-resolvable
+```
+
+To preview skill writes before changing files:
+
+```powershell
+munin install --dry-run
+```
+
 For local development from this working tree:
+
+```powershell
+cargo install --path . --force
+```
+
+Run the normal development checks before cutting a release:
 
 ```powershell
 cargo build --release
