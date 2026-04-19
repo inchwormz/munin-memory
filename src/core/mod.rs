@@ -7,6 +7,7 @@ pub mod constants;
 pub mod filter;
 pub mod memory_hygiene;
 pub mod memory_os;
+pub mod proactivity;
 pub mod resolver;
 pub mod strategy;
 pub mod tee;

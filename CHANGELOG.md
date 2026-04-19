@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.5.0-beta.2 - 2026-04-19
+
+### Added
+
+- `munin proactivity` now owns the morning strategy/continuity runner that previously lived under `context proactivity`.
+- Proactivity schedule install/remove/status, queue claim/approve/reject/complete, and no-spawn run surfaces are available from the public Munin CLI.
+
+### Changed
+
+- Proactivity scheduled tasks now install as `Munin-Proactivity-*` tasks and remove legacy `Context-Munin-Proactivity-*` tasks during install/remove.
+- Morning proactivity briefs now use a bounded compiled Memory OS overview instead of the heavier startup prompt renderer.
+
 ## 0.5.0-beta.1 - 2026-04-19
 
 First clean Munin open-source testing build.
@@ -9,6 +21,7 @@ First clean Munin open-source testing build.
 - Munin access-layer resolver and generated Codex/Claude skill contracts.
 - Resolver fixture checks for the main memory surfaces.
 - `munin hygiene` for duplicate guidance reports.
+- `munin proactivity` for scheduled strategy/continuity evaluation, morning briefs, queue approval, and result capture.
 - Strategy KPI metric read/write surfaces.
 - Independent Memory OS promotion proof gate for `test-private` and `adversarial-private`.
 
