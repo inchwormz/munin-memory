@@ -1,6 +1,6 @@
 [package]
 name = "munin-memory"
-version = "0.5.0-beta.1"
+version = "0.5.0-beta.2"
 edition = "2021"
 autobins = false
 authors = ["John McKeown"]
@@ -13,11 +13,11 @@ categories = ["command-line-utilities", "development-tools"]
 include = [
     "/Cargo.lock",
     "/Cargo.toml",
-"/LICENSE",
-"/NOTICE",
-"/CONTRIBUTING.md",
-"/CODE_OF_CONDUCT.md",
-"/README.md",
+    "/LICENSE",
+    "/NOTICE",
+    "/CONTRIBUTING.md",
+    "/CODE_OF_CONDUCT.md",
+    "/README.md",
     "/build.rs",
     "/src/lib.rs",
     "/src/bin/munin.rs",
@@ -34,6 +34,7 @@ include = [
     "/src/core/memory_hygiene.rs",
     "/src/core/memory_os.rs",
     "/src/core/mod.rs",
+    "/src/core/proactivity.rs",
     "/src/core/resolver.rs",
     "/src/core/strategy.rs",
     "/src/core/tee.rs",
@@ -47,6 +48,7 @@ include = [
     "/src/session_brain/**",
     "/src/session_intelligence/mod.rs",
     "/src/session_intelligence/provider.rs",
+    "/src/proactivity_cmd.rs",
     "/src/strategy_cmd.rs",
     "/tests/cli_contract.rs",
     "/tests/fixtures/**",

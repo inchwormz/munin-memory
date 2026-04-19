@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
-use munin_memory::{analytics, core, session_brain, strategy_cmd};
+use munin_memory::{analytics, core, proactivity_cmd, session_brain, strategy_cmd};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fs;
@@ -171,6 +171,11 @@ enum Commands {
     Strategy {
         #[command(subcommand)]
         command: StrategyCommands,
+    },
+    /// Morning strategic proactivity runner, queue, and scheduling surface
+    Proactivity {
+        #[command(subcommand)]
+        command: ProactivityCommands,
     },
 }
 
@@ -349,6 +354,157 @@ enum StrategyCommands {
     },
 }
 
+#[derive(Debug, Clone, Copy, clap::ValueEnum)]
+enum ProactivityStatusArg {
+    Complete,
+    Failed,
+    Deferred,
+    Suppressed,
+}
+
+impl From<ProactivityStatusArg> for core::proactivity::ProactivityTerminalStatus {
+    fn from(value: ProactivityStatusArg) -> Self {
+        match value {
+            ProactivityStatusArg::Complete => {
+                core::proactivity::ProactivityTerminalStatus::Complete
+            }
+            ProactivityStatusArg::Failed => core::proactivity::ProactivityTerminalStatus::Failed,
+            ProactivityStatusArg::Deferred => {
+                core::proactivity::ProactivityTerminalStatus::Deferred
+            }
+            ProactivityStatusArg::Suppressed => {
+                core::proactivity::ProactivityTerminalStatus::Suppressed
+            }
+        }
+    }
+}
+
+#[derive(Subcommand)]
+enum ProactivityCommands {
+    /// Run the morning proactivity evaluation and optionally spawn a session
+    Run {
+        /// Optional scope override
+        #[arg(long)]
+        scope: Option<String>,
+        /// Optional provider override
+        #[arg(long, value_enum)]
+        provider: Option<core::config::ProactivityProvider>,
+        /// Compute artifacts but do not launch a visible session
+        #[arg(long, default_value_t = false)]
+        dry_run: bool,
+        /// Immediately launch the queued intervention after writing approval artifacts
+        #[arg(long, default_value_t = false)]
+        auto_spawn: bool,
+        /// Skip the actual spawn but still write queue/brief/decision artifacts
+        #[arg(long, default_value_t = false)]
+        no_spawn: bool,
+        /// Output format
+        #[arg(short, long, value_enum, default_value = "text")]
+        format: proactivity_cmd::ProactivityFormat,
+    },
+    /// Sweep stale queue claims/results and finalize daemon state
+    Sweep {
+        /// Optional scope override
+        #[arg(long)]
+        scope: Option<String>,
+        /// Output format
+        #[arg(short, long, value_enum, default_value = "text")]
+        format: proactivity_cmd::ProactivityFormat,
+    },
+    /// Show current proactivity status, schedules, and today's artifact state
+    Status {
+        /// Optional scope override
+        #[arg(long)]
+        scope: Option<String>,
+        /// Output format
+        #[arg(short, long, value_enum, default_value = "text")]
+        format: proactivity_cmd::ProactivityFormat,
+    },
+    /// Install the 8am morning task and maintenance sweep task
+    #[command(name = "schedule-install")]
+    ScheduleInstall {
+        /// Optional scope override
+        #[arg(long)]
+        scope: Option<String>,
+        /// Optional provider override
+        #[arg(long, value_enum)]
+        provider: Option<core::config::ProactivityProvider>,
+        /// Optional project path override
+        #[arg(long)]
+        project_path: Option<PathBuf>,
+        /// Output format
+        #[arg(short, long, value_enum, default_value = "text")]
+        format: proactivity_cmd::ProactivityFormat,
+    },
+    /// Remove installed proactivity scheduled tasks for the scope
+    #[command(name = "schedule-remove")]
+    ScheduleRemove {
+        /// Optional scope override
+        #[arg(long)]
+        scope: Option<String>,
+        /// Output format
+        #[arg(short, long, value_enum, default_value = "text")]
+        format: proactivity_cmd::ProactivityFormat,
+    },
+    /// Claim a queued morning proactivity job by atomic rename
+    Claim {
+        /// Job id to claim
+        #[arg(long)]
+        job_id: String,
+        /// Output format
+        #[arg(short, long, value_enum, default_value = "text")]
+        format: proactivity_cmd::ProactivityFormat,
+    },
+    /// Approve a queued morning proactivity job and optionally launch it
+    Approve {
+        /// Job id to approve
+        #[arg(long)]
+        job_id: String,
+        /// Claim the job without launching a visible session
+        #[arg(long, default_value_t = false)]
+        no_spawn: bool,
+        /// Output format
+        #[arg(short, long, value_enum, default_value = "text")]
+        format: proactivity_cmd::ProactivityFormat,
+    },
+    /// Reject a queued morning proactivity job with a terminal result
+    Reject {
+        /// Job id to reject
+        #[arg(long)]
+        job_id: String,
+        /// Summary line for the rejection
+        #[arg(long)]
+        summary: String,
+        /// Optional rejection notes (repeatable)
+        #[arg(long = "note")]
+        notes: Vec<String>,
+        /// Output format
+        #[arg(short, long, value_enum, default_value = "text")]
+        format: proactivity_cmd::ProactivityFormat,
+    },
+    /// Write a terminal result for a claimed morning proactivity job
+    Complete {
+        /// Job id to complete
+        #[arg(long)]
+        job_id: String,
+        /// Final status to write
+        #[arg(long, value_enum)]
+        status: ProactivityStatusArg,
+        /// Summary line for the result
+        #[arg(long)]
+        summary: String,
+        /// Optional error detail
+        #[arg(long)]
+        error: Option<String>,
+        /// Optional notes (repeatable)
+        #[arg(long = "note")]
+        notes: Vec<String>,
+        /// Output format
+        #[arg(short, long, value_enum, default_value = "text")]
+        format: proactivity_cmd::ProactivityFormat,
+    },
+}
+
 fn main() {
     let code = match run_cli() {
         Ok(code) => code,
@@ -474,6 +630,7 @@ fn run_cli() -> Result<i32> {
         }
         Commands::MemoryOs { command } => run_memory_os(command, cli.verbose)?,
         Commands::Strategy { command } => run_strategy(command)?,
+        Commands::Proactivity { command } => run_proactivity(command)?,
     };
     Ok(code)
 }
@@ -807,6 +964,102 @@ fn run_strategy(command: StrategyCommands) -> Result<i32> {
         }
         StrategyCommands::Recommend { scope, format } => {
             strategy_cmd::run_recommend(strategy_cmd::StrategyReadRequest { scope, format })?
+        }
+    }
+    Ok(0)
+}
+
+fn run_proactivity(command: ProactivityCommands) -> Result<i32> {
+    match command {
+        ProactivityCommands::Run {
+            scope,
+            provider,
+            dry_run,
+            auto_spawn,
+            no_spawn,
+            format,
+        } => {
+            proactivity_cmd::run(proactivity_cmd::ProactivityRunRequest {
+                scope,
+                provider,
+                dry_run,
+                auto_spawn,
+                no_spawn,
+                format,
+            })?;
+        }
+        ProactivityCommands::Sweep { scope, format } => {
+            proactivity_cmd::sweep(proactivity_cmd::ProactivityScopeRequest { scope, format })?;
+        }
+        ProactivityCommands::Status { scope, format } => {
+            proactivity_cmd::status(proactivity_cmd::ProactivityScopeRequest { scope, format })?;
+        }
+        ProactivityCommands::ScheduleInstall {
+            scope,
+            provider,
+            project_path,
+            format,
+        } => {
+            proactivity_cmd::schedule_install(
+                proactivity_cmd::ProactivityScheduleInstallRequest {
+                    scope,
+                    provider,
+                    project_path,
+                    format,
+                },
+            )?;
+        }
+        ProactivityCommands::ScheduleRemove { scope, format } => {
+            proactivity_cmd::schedule_remove(proactivity_cmd::ProactivityScopeRequest {
+                scope,
+                format,
+            })?;
+        }
+        ProactivityCommands::Claim { job_id, format } => {
+            proactivity_cmd::claim(proactivity_cmd::ProactivityClaimRequest { job_id, format })?;
+        }
+        ProactivityCommands::Approve {
+            job_id,
+            no_spawn,
+            format,
+        } => {
+            proactivity_cmd::approve(proactivity_cmd::ProactivityApproveRequest {
+                job_id,
+                no_spawn,
+                format,
+            })?;
+        }
+        ProactivityCommands::Reject {
+            job_id,
+            summary,
+            notes,
+            format,
+        } => {
+            proactivity_cmd::complete(proactivity_cmd::ProactivityCompleteRequest {
+                job_id,
+                status: core::proactivity::ProactivityTerminalStatus::Suppressed,
+                summary,
+                error: None,
+                notes,
+                format,
+            })?;
+        }
+        ProactivityCommands::Complete {
+            job_id,
+            status,
+            summary,
+            error,
+            notes,
+            format,
+        } => {
+            proactivity_cmd::complete(proactivity_cmd::ProactivityCompleteRequest {
+                job_id,
+                status: status.into(),
+                summary,
+                error,
+                notes,
+                format,
+            })?;
         }
     }
     Ok(0)
@@ -1309,7 +1562,7 @@ fn render_bullets(items: &[&str]) -> String {
 
 const CODEX_PLUGIN_JSON: &str = r#"{
   "name": "munin-memory",
-  "version": "0.5.0-beta.1",
+  "version": "0.5.0-beta.2",
   "description": "Munin local memory surfaces for Codex.",
   "interface": {
     "displayName": "Munin Memory",
@@ -1344,6 +1597,66 @@ mod tests {
         parse_ok(&["munin", "metrics", "get", "--scope", "sitesorted-business"]);
         parse_ok(&["munin", "hygiene"]);
         parse_ok(&["munin", "hygiene", "--root", ".", "--include-codex"]);
+        parse_ok(&[
+            "munin",
+            "proactivity",
+            "run",
+            "--scope",
+            "sitesorted-business",
+            "--provider",
+            "claude",
+            "--auto-spawn",
+            "--dry-run",
+        ]);
+        parse_ok(&["munin", "proactivity", "sweep"]);
+        parse_ok(&["munin", "proactivity", "status"]);
+        parse_ok(&[
+            "munin",
+            "proactivity",
+            "schedule-install",
+            "--scope",
+            "sitesorted-business",
+            "--provider",
+            "codex",
+            "--project-path",
+            ".",
+        ]);
+        parse_ok(&["munin", "proactivity", "schedule-remove"]);
+        parse_ok(&[
+            "munin",
+            "proactivity",
+            "claim",
+            "--job-id",
+            "morning-sitesorted-business-2026-04-19",
+        ]);
+        parse_ok(&[
+            "munin",
+            "proactivity",
+            "approve",
+            "--job-id",
+            "morning-sitesorted-business-2026-04-19",
+            "--no-spawn",
+        ]);
+        parse_ok(&[
+            "munin",
+            "proactivity",
+            "reject",
+            "--job-id",
+            "morning-sitesorted-business-2026-04-19",
+            "--summary",
+            "not today",
+        ]);
+        parse_ok(&[
+            "munin",
+            "proactivity",
+            "complete",
+            "--job-id",
+            "morning-sitesorted-business-2026-04-19",
+            "--status",
+            "complete",
+            "--summary",
+            "done",
+        ]);
         parse_ok(&[
             "munin",
             "metrics",

@@ -2,7 +2,7 @@
 
 Local memory system for agent-driven development.
 
-Current testing build: `v0.5.0-beta.1`.
+Current testing build: `v0.5.0-beta.2`.
 
 ## What It Is
 
@@ -14,7 +14,8 @@ Munin has three layers:
 
 1. **Session ingestion** reads local Claude, Codex, and archived session data: prompts, assistant turns, shell commands, outcomes, corrections, working directories, and timestamps.
 2. **Memory compilation** converts those raw sessions into a local Memory OS: evidence-backed facts, current project goals, open loops, repeated mistakes, command outcomes, strategy pressure, and proof rows.
-3. **Agent access** exposes the compiled memory through CLI surfaces and installed Codex/Claude skills, so agents query structured memory instead of searching raw transcripts.
+3. **Proactivity** can evaluate strategy and continuity on a schedule, write a morning brief, queue an intervention, and optionally launch an agent session.
+4. **Agent access** exposes the compiled memory through CLI surfaces and installed Codex/Claude skills, so agents query structured memory instead of searching raw transcripts.
 
 No hosted service is required for the local CLI. The compiled state stays on the machine running Munin.
 
@@ -25,6 +26,7 @@ Core surfaces:
 - `munin resume --format prompt` for the startup memory brief
 - `munin brain --format prompt` for the live Session Brain
 - `munin nudge` for strategy-backed next-step recommendations
+- `munin proactivity run --no-spawn` for the morning strategy/continuity evaluation
 - `munin prove --last-resume` for replay/promotion proof
 - `munin friction` for repeated correction and friction patterns
 - `munin recall "topic"` for the compiled Memory OS read path
@@ -33,14 +35,6 @@ Core surfaces:
 - `munin hygiene` for duplicate CLAUDE.md / AGENTS.md / CONTEXT.md guidance reports
 - `munin doctor --scope user` for a fast Memory OS health check
 - `munin install --check-resolvable` for skill/resolver validation
-
-## Proactivity Status
-
-Munin's morning proactivity runner is in dogfood, but it is not part of this public beta CLI yet.
-
-The proactivity runtime evaluates strategy and continuity on a schedule, writes a morning brief, creates an approval queue item, and can launch an interactive agent session. That lane is still being proven before it moves into the open-source `munin` binary.
-
-The current beta includes the compiler and read surfaces that proactivity depends on: session ingestion, strategy metrics, Memory OS projections, nudges, proof, and Doctor checks.
 
 ## Testing Build Status
 
@@ -105,6 +99,7 @@ munin friction --agent codex --last 30d
 munin recall "refund SLA"
 munin resolve "what keeps going wrong?"
 munin metrics get --scope sitesorted-business
+munin proactivity status --scope sitesorted-business
 munin hygiene --root . --format text
 munin doctor --scope user
 munin install --dry-run
@@ -137,8 +132,10 @@ Raw recall/session history is fallback provenance, not the default answer path.
 - `src/bin/munin.rs` - product CLI entrypoint
 - `src/analytics/` - Memory OS read surfaces and session ingestion
 - `src/core/` - tracking, strategy, Memory OS models, and projections
+- `src/core/proactivity.rs` - morning proactivity queue, schedule, and run logic
 - `src/session_brain/` - current-session startup brain
 - `src/session_intelligence/` - local Claude/Codex session readers
+- `src/proactivity_cmd.rs` - proactivity CLI rendering
 
 ## Notes
 

@@ -2,7 +2,7 @@
 
 Use this repo as the Munin CLI source of truth.
 
-Current testing build: `v0.5.0-beta.1`.
+Current testing build: `v0.5.0-beta.2`.
 
 ## Build
 
