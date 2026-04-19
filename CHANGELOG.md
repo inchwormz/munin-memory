@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.1-beta-1 - 2026-04-20
+
+### Fixed
+
+- Session Brain now fails closed when a live Codex or Claude session id is present but its transcript is missing.
+- Session Brain no longer falls back to another session's latest transcript in that missing-live-transcript state.
+- Session Brain no longer injects broad Memory OS current-work/profile summaries that can look like cross-session leakage.
+
 ## 0.5.0-beta.1 - 2026-04-19
 
 First clean Munin open-source testing build.

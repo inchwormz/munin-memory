@@ -2,7 +2,7 @@
 
 Local memory system for agent-driven development.
 
-Current testing build: `v0.5.0-beta.1`.
+Current testing build: `v0.5.1-beta-1`.
 
 ## What It Is
 
@@ -69,6 +69,8 @@ What still needs real-world proof before final `v0.5.0`:
 ## License
 
 Munin is licensed under the Apache 2.0 license.
+
+Source: https://github.com/inchwormz/munin
 
 The hosted product, when built, lives in a separate private repository and is not part of this Apache-licensed local CLI repo.
 
