@@ -2721,10 +2721,18 @@ mod tests {
         std::env::set_var("CONTEXT_DATA_DIR_PATH", temp.path());
 
         let paths = resolve_paths(&ProactivityConfig::default()).expect("paths");
-        assert!(paths.queue_dir.ends_with("proactivity\\queue"));
-        assert!(paths.results_dir.ends_with("proactivity\\results"));
-        assert!(paths.briefs_dir.ends_with("proactivity\\briefs"));
-        assert!(paths.state_dir.ends_with("proactivity\\state"));
+        assert!(paths
+            .queue_dir
+            .ends_with(Path::new("proactivity").join("queue")));
+        assert!(paths
+            .results_dir
+            .ends_with(Path::new("proactivity").join("results")));
+        assert!(paths
+            .briefs_dir
+            .ends_with(Path::new("proactivity").join("briefs")));
+        assert!(paths
+            .state_dir
+            .ends_with(Path::new("proactivity").join("state")));
 
         std::env::remove_var("CONTEXT_DATA_DIR_PATH");
     }
