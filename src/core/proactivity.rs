@@ -1148,6 +1148,8 @@ fn fallback_recommend_report(scope_id: &str, warning: String) -> StrategyRecomme
             active: false,
             summary: None,
         },
+        nudge_tasks: Vec::new(),
+        continuity_tasks: Vec::new(),
         nudges: Vec::new(),
         suppressed_nudges: Vec::new(),
         warnings: vec![warning],
@@ -1247,11 +1249,7 @@ fn evaluate_decision(
         brief_path: files.brief_path.display().to_string(),
         queue_path: None,
         result_path: Some(files.result_path.display().to_string()),
-        nudge_tasks: recommend_report
-            .nudges
-            .iter()
-            .map(|nudge| nudge.task.clone())
-            .collect(),
+        nudge_tasks: recommend_report.nudge_tasks.clone(),
     })
 }
 
@@ -1276,11 +1274,7 @@ fn build_job(
         decision_path: files.decision_path.display().to_string(),
         result_path: files.result_path.display().to_string(),
         continuity_active: recommend_report.continuity.active,
-        nudge_tasks: recommend_report
-            .nudges
-            .iter()
-            .map(|nudge| nudge.task.clone())
-            .collect(),
+        nudge_tasks: recommend_report.nudge_tasks.clone(),
         intervention_job_ids: recommend_report
             .nudges
             .iter()
@@ -2408,6 +2402,11 @@ mod tests {
                 active: false,
                 summary: None,
             },
+            nudge_tasks: vec![
+                "Instrument KPI".to_string(),
+                "Fix friction: Keep autonomous work moving without manual polling".to_string(),
+            ],
+            continuity_tasks: Vec::new(),
             nudges: vec![
                 StrategicNudge {
                     task: "Instrument KPI".to_string(),
@@ -2697,6 +2696,8 @@ mod tests {
                     active: true,
                     summary: Some("already running".to_string()),
                 },
+                nudge_tasks: Vec::new(),
+                continuity_tasks: Vec::new(),
                 nudges: Vec::new(),
                 suppressed_nudges: Vec::new(),
                 warnings: Vec::new(),
