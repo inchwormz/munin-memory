@@ -3521,9 +3521,19 @@ fn render_correction_patterns_to_codify(patterns: &[MemoryOsCorrectionPatternSum
         return;
     }
     for (index, pattern) in filtered.iter().enumerate() {
-        let wrong = pattern.wrong_command.split_whitespace().collect::<Vec<_>>().join(" ");
-        let corrected = pattern.corrected_command.split_whitespace().collect::<Vec<_>>().join(" ");
-        let status = if pattern.successful_replays > pattern.failed_replays && pattern.successful_replays >= pattern.count {
+        let wrong = pattern
+            .wrong_command
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
+        let corrected = pattern
+            .corrected_command
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
+        let status = if pattern.successful_replays > pattern.failed_replays
+            && pattern.successful_replays >= pattern.count
+        {
             "replaying-clean"
         } else {
             "uncodified"
@@ -3552,11 +3562,20 @@ fn command_diff_display(wrong: &str, corrected: &str, max_tail: usize) -> (Strin
         let wrong_tail = tail_from(wrong, common, max_tail);
         let corrected_tail = tail_from(corrected, common, max_tail);
         (
-            format!("[shared {}ch: `{}...`] ...{}", common, shared_preview, wrong_tail),
-            format!("[shared {}ch: `{}...`] ...{}", common, shared_preview, corrected_tail),
+            format!(
+                "[shared {}ch: `{}...`] ...{}",
+                common, shared_preview, wrong_tail
+            ),
+            format!(
+                "[shared {}ch: `{}...`] ...{}",
+                common, shared_preview, corrected_tail
+            ),
         )
     } else {
-        (display_text(wrong, max_tail), display_text(corrected, max_tail))
+        (
+            display_text(wrong, max_tail),
+            display_text(corrected, max_tail),
+        )
     }
 }
 

@@ -1964,7 +1964,7 @@ fn build_launch_command(
         })
         .unwrap_or_default();
     let prompt = format!(
-        "{token}. The daemon already claimed the job. Read the brief at \"{brief_path}\".{leading_task} When you finish, run: munin proactivity complete --job-id \"{job_id}\" --status complete --summary \"<one sentence summary>\". On failure run: munin proactivity complete --job-id \"{job_id}\" --status failed --summary \"<short failure summary>\" --error \"<concrete error>\". Full instructions are also at \"{launch_path}\".",
+        "{token}. The daemon already claimed the job. Read the brief at '{brief_path}'.{leading_task} When you finish, run: munin proactivity complete --job-id '{job_id}' --status complete --summary '<one sentence summary>'. On failure run: munin proactivity complete --job-id '{job_id}' --status failed --summary '<short failure summary>' --error '<concrete error>'. Full instructions are also at '{launch_path}'.",
         token = MORNING_PROMPT_TOKEN,
         job_id = job.job_id,
         brief_path = job.brief_path,
@@ -1982,7 +1982,7 @@ fn build_launch_command(
                 "claude-opus-4-6",
                 &prompt,
             ],
-            &["CLAUDECODE", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"],
+            &[],
         ),
         ProactivityProvider::Codex => build_provider_launch_command(
             &job.session_name,
@@ -2925,6 +2925,9 @@ mod tests {
             .preview
             .contains("Start with this intervention: Fix friction"));
         assert!(launch.preview.contains("Work it until implemented"));
+        assert!(!launch.preview.contains("set CLAUDECODE="));
+        assert!(!launch.preview.contains("set ANTHROPIC_API_KEY="));
+        assert!(!launch.preview.contains("set ANTHROPIC_AUTH_TOKEN="));
     }
 
     #[test]
