@@ -21,6 +21,9 @@ Munin is open source under the Apache 2.0 license.
 
 ## What Munin Does
 
+<img width="996" height="795" alt="image" src="https://github.com/user-attachments/assets/5e2d0faa-ee36-40e6-8c08-e31c59769f6f" />
+
+
 Munin has five local layers:
 
 1. **Session ingestion** reads first-class Claude and Codex sessions: prompts,
