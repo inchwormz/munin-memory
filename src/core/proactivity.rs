@@ -1982,7 +1982,7 @@ fn build_launch_command(
                 "claude-opus-4-6",
                 &prompt,
             ],
-            &["CLAUDECODE", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"],
+            &[],
         ),
         ProactivityProvider::Codex => build_provider_launch_command(
             &job.session_name,
@@ -2925,6 +2925,9 @@ mod tests {
             .preview
             .contains("Start with this intervention: Fix friction"));
         assert!(launch.preview.contains("Work it until implemented"));
+        assert!(!launch.preview.contains("set CLAUDECODE="));
+        assert!(!launch.preview.contains("set ANTHROPIC_API_KEY="));
+        assert!(!launch.preview.contains("set ANTHROPIC_AUTH_TOKEN="));
     }
 
     #[test]
