@@ -308,6 +308,31 @@ fn find_claude_session_path(session_id: &str) -> Result<Option<PathBuf>> {
     Ok(None)
 }
 
+// Collect JSONL transcripts under `root` with their mtime (cheap metadata-only syscalls),
+// sorted most-recent first. The per-file meta read inside read_codex_meta /
+// read_claude_meta is the expensive step (opens + parses up to 64 lines), so callers
+// walk this list and short-circuit on the first project-matching transcript instead
+// of opening every file.
+fn collect_transcripts_by_mtime(root: &Path) -> Vec<(PathBuf, SystemTime)> {
+    let mut entries = Vec::new();
+    for entry in WalkDir::new(root)
+        .follow_links(false)
+        .into_iter()
+        .flatten()
+    {
+        let path = entry.path();
+        if !path.is_file() || path.extension().and_then(|ext| ext.to_str()) != Some("jsonl") {
+            continue;
+        }
+        let modified_at = fs::metadata(path)
+            .and_then(|meta| meta.modified())
+            .unwrap_or(SystemTime::UNIX_EPOCH);
+        entries.push((path.to_path_buf(), modified_at));
+    }
+    entries.sort_by(|left, right| right.1.cmp(&left.1));
+    entries
+}
+
 fn find_latest_codex_session(project_root: &Path) -> Result<Option<TranscriptCandidate>> {
     let Some(home) = dirs::home_dir() else {
         return Ok(None);
@@ -318,18 +343,9 @@ fn find_latest_codex_session(project_root: &Path) -> Result<Option<TranscriptCan
     }
 
     let project_root = normalized_project_root(project_root);
-    let mut best: Option<TranscriptCandidate> = None;
 
-    for entry in WalkDir::new(&root)
-        .follow_links(false)
-        .into_iter()
-        .flatten()
-    {
-        let path = entry.path();
-        if !path.is_file() || path.extension().and_then(|ext| ext.to_str()) != Some("jsonl") {
-            continue;
-        }
-        let Some(meta) = read_codex_meta(path)? else {
+    for (path, modified_at) in collect_transcripts_by_mtime(&root) {
+        let Some(meta) = read_codex_meta(&path)? else {
             continue;
         };
         if meta.is_subagent {
@@ -341,23 +357,14 @@ fn find_latest_codex_session(project_root: &Path) -> Result<Option<TranscriptCan
         if !project_matches(cwd, &project_root) {
             continue;
         }
-        let modified_at = fs::metadata(path)
-            .and_then(|meta| meta.modified())
-            .unwrap_or(SystemTime::UNIX_EPOCH);
-        let replace = best
-            .as_ref()
-            .map(|current| modified_at > current.modified_at)
-            .unwrap_or(true);
-        if replace {
-            best = Some(TranscriptCandidate {
-                session_id: meta.session_id,
-                path: path.to_path_buf(),
-                modified_at,
-            });
-        }
+        return Ok(Some(TranscriptCandidate {
+            session_id: meta.session_id,
+            path,
+            modified_at,
+        }));
     }
 
-    Ok(best)
+    Ok(None)
 }
 
 fn find_latest_claude_session(project_root: &Path) -> Result<Option<TranscriptCandidate>> {
@@ -370,18 +377,9 @@ fn find_latest_claude_session(project_root: &Path) -> Result<Option<TranscriptCa
     }
 
     let project_root = normalized_project_root(project_root);
-    let mut best: Option<TranscriptCandidate> = None;
 
-    for entry in WalkDir::new(&root)
-        .follow_links(false)
-        .into_iter()
-        .flatten()
-    {
-        let path = entry.path();
-        if !path.is_file() || path.extension().and_then(|ext| ext.to_str()) != Some("jsonl") {
-            continue;
-        }
-        let Some(meta) = read_claude_meta(path)? else {
+    for (path, modified_at) in collect_transcripts_by_mtime(&root) {
+        let Some(meta) = read_claude_meta(&path)? else {
             continue;
         };
         if meta.is_sidechain {
@@ -393,23 +391,14 @@ fn find_latest_claude_session(project_root: &Path) -> Result<Option<TranscriptCa
         if !project_matches(cwd, &project_root) {
             continue;
         }
-        let modified_at = fs::metadata(path)
-            .and_then(|meta| meta.modified())
-            .unwrap_or(SystemTime::UNIX_EPOCH);
-        let replace = best
-            .as_ref()
-            .map(|current| modified_at > current.modified_at)
-            .unwrap_or(true);
-        if replace {
-            best = Some(TranscriptCandidate {
-                session_id: meta.session_id,
-                path: path.to_path_buf(),
-                modified_at,
-            });
-        }
+        return Ok(Some(TranscriptCandidate {
+            session_id: meta.session_id,
+            path,
+            modified_at,
+        }));
     }
 
-    Ok(best)
+    Ok(None)
 }
 
 fn extract_context_snapshot_paths(project_root: &Path, text: &str) -> Vec<PathBuf> {
