@@ -2,7 +2,9 @@
 
 Local memory for Claude Code and Codex.
 
-Munin reads your existing agent sessions, compiles them into a local Memory OS,
+Munin ingests all Claude Codex sessions. Approx time for 3000 sessions raw data = < 1minute
+
+Munin compiles them into a local Memory OS Kernel
 and exposes that memory back to your agent through CLI commands, Claude slash
 commands, and Codex skills. It is designed for developers who want agents to
 remember active work, repeated mistakes, strategic priorities, and unfinished
@@ -30,12 +32,14 @@ open loops, repeated friction, command outcomes, strategy context, and next step
 3. **Strategy and proactivity** turn memory into concrete tasks. `munin nudge`
 now combines strategy red/yellow items with continuity work from previous
 completed sessions, active projects, and verified incomplete tasks. The morning
-proactivity runner can evaluate that state on a schedule and start the next work
-session when the configured threshold is met.
-4. **Agent access** installs Claude skills, Claude slash commands, Codex skills,
+proactivity spawns a Claude session that can evaluate state on a schedule and start the next work
+session and infer what tasks should be executed based on goal/project deltas. Where you are now,
+where you want to be, what closes the delta? It will enable Claude/Codex to be proactive to help
+you reach your goals.
+5. **Agent access** installs Claude skills, Claude slash commands, Codex skills,
 and a Codex plugin skill bundle so agents can query compiled memory instead of
 trawling raw transcripts.
-5. **Session Brain** compiles the current live session into a short working
+6. **Session Brain** compiles the current live session into a short working
 memory layer: who the user is, what they care about, the current ask, active
 strategy, blockers, and next actions. It is for long context windows where the
 agent needs current-session oversight, not historical search.
@@ -45,7 +49,7 @@ Munin.
 
 ## Install For A New User
 
-Today, Munin distribution is binary-first. A Claude plugin marketplace package is
+Today, Munin distribution is binary-first. A Claude/Codex plugin marketplace package is
 not live yet. Install the `munin` binary first, then ask Munin to install the
 agent-facing skills and commands.
 
@@ -53,21 +57,6 @@ agent-facing skills and commands.
 
 ```powershell
 cargo install munin-memory --force
-```
-
-This installs a command named `munin`.
-
-Verify it:
-
-```powershell
-munin --version
-munin install --check-resolvable
-```
-
-Expected check output:
-
-```text
-install check-resolvable: ... resolver, skill, and fixture checks passed
 ```
 
 ### Option B: Install From GitHub Source
