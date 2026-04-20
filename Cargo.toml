@@ -19,6 +19,7 @@ include = [
     "/CODE_OF_CONDUCT.md",
     "/README.md",
     "/build.rs",
+    "/scripts/munin-release-check.ps1",
     "/src/lib.rs",
     "/src/bin/munin.rs",
     "/src/analytics/mod.rs",
