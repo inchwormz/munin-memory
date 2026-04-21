@@ -1,11 +1,22 @@
 # Changelog
 
-## 0.5.7 - 2026-04-21
+## 0.5.8 - 2026-04-21
 
 ### Fixed
 
 - Session Brain now treats only exact session-id transcript matches as live, so a newer same-project transcript from another terminal cannot appear as the current ask.
 - Live user messages now suppress durable memory and strategy fallback even when the ask is not classified, preventing stale memory from replacing the active session.
+
+## 0.5.7 - 2026-04-22
+
+### Added
+
+- `munin friction --format text` now includes a `New But Unproven Friction Points` section for high-signal corrections that should be avoided immediately, even before they are repeated enough to become codified friction fixes.
+
+### Fixed
+
+- Strategy discovery now treats `strategic-plan.context.json` as the authoritative OPSP artifact, including standalone `strategy/` folders and legacy Context strategy stores.
+- `munin strategy status` and Session Brain can now read a formal OPSP JSON sidecar directly instead of falling back to Memory OS prose when no Munin registry/kernel wrapper is configured.
 
 ## 0.5.6 - 2026-04-21
 
