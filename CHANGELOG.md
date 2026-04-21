@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.7 - 2026-04-21
+
+### Fixed
+
+- Strategy discovery now treats `strategic-plan.context.json` as the authoritative OPSP artifact, including standalone `strategy/` folders and legacy Context strategy stores.
+- `munin strategy status` and Session Brain can now read the SiteSorted OPSP directly instead of falling back to Memory OS prose when no Munin registry/kernel wrapper is configured.
+
 ## 0.5.6 - 2026-04-21
 
 ### Added
