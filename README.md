@@ -306,6 +306,19 @@ Codex equivalents use `$...`.
 `munin install` archives old Munin skill folders into `.munin-legacy` by default.
 Use `--keep-legacy` to leave them in place.
 
+## Non-Technical Release Check
+
+For a plain PASS/WARN/FAIL readout before trusting a local build, run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\munin-release-check.ps1
+```
+
+The check verifies the binary, install contract from the repo, install contract
+from a temporary folder, memory health, promotion proof, and resolver routing.
+`WARN` means Munin is mechanically usable but has a follow-up to review. `FAIL`
+means fix the named item before trusting the release.
+
 ## Privacy And Storage
 
 Munin reads local agent history and writes a local SQLite-backed Memory OS under
