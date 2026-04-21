@@ -46,6 +46,7 @@ include = [
     "/src/core/worldview.rs",
     "/src/rewrite_engine/detector.rs",
     "/src/rewrite_engine/mod.rs",
+    "/src/runtime_context/**",
     "/src/session_brain/**",
     "/src/session_intelligence/mod.rs",
     "/src/session_intelligence/provider.rs",

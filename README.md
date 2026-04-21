@@ -19,6 +19,17 @@ Current testing build: `v0.5.4`.
 
 Munin is open source under the Apache 2.0 license.
 
+## Runtime Ownership
+
+Munin is the product owner for runtime context. End users should not need the
+`context` tool installed in order to use Munin's Session Brain, startup brief,
+strategy surfaces, or Claude/Codex integration assets.
+
+Architecture docs:
+
+- [Runtime Context Ownership](docs/architecture/runtime-context-ownership.md)
+- [Context Strangler Migration](docs/architecture/context-strangler-migration.md)
+
 ## What Munin Does
 
 <img width="996" height="795" alt="image" src="https://github.com/user-attachments/assets/5e2d0faa-ee36-40e6-8c08-e31c59769f6f" />
@@ -79,7 +90,8 @@ munin install --check-resolvable
 
 ## Install Agent Skills
 
-After the binary works, install the surfaces for the agent you use.
+After the binary works, install the surfaces for the agent you use. The
+supported runtime path is Munin-only.
 
 ### Claude Code
 

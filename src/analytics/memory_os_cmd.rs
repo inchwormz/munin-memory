@@ -572,6 +572,26 @@ pub fn run_brief(
     Ok(())
 }
 
+pub fn run_startup_brief(
+    scope: &str,
+    project_path: Option<&str>,
+    format: &str,
+    verbose: u8,
+) -> Result<()> {
+    if format != "prompt" {
+        return run_brief(scope, project_path, format, false, verbose);
+    }
+
+    validate_brief_format(format)?;
+    let scope = validate_scope(scope, project_path)?;
+    let tracker = Tracker::new().context("Failed to initialize tracking database")?;
+    let onboarding = tracker
+        .get_memory_os_onboarding_state_fast()
+        .context("Failed to load fast Memory OS onboarding state")?;
+    println!("{}", render_fast_startup_brief(scope, &onboarding));
+    Ok(())
+}
+
 pub(crate) fn render_brief_with_tracker(
     tracker: &Tracker,
     scope: MemoryOsInspectionScope,
@@ -596,6 +616,46 @@ pub(crate) fn render_brief_with_tracker(
     }
 
     Ok(rendered)
+}
+
+fn render_fast_startup_brief(
+    scope: MemoryOsInspectionScope,
+    onboarding: &crate::core::memory_os::MemoryOsOnboardingState,
+) -> String {
+    let mut lines = Vec::new();
+    lines.push(format!(
+        "<startup_memory_brief scope=\"{}\" generated_at=\"{}\">",
+        scope,
+        Utc::now().to_rfc3339()
+    ));
+    lines.push("<what_i_know>".to_string());
+    lines.push(format!(
+        "- Memory OS has indexed {} sessions and {} shell executions.",
+        onboarding.sessions_processed, onboarding.shells_ingested
+    ));
+    lines.push(format!(
+        "- Backfill status: {} (schema {}).",
+        onboarding.status, onboarding.schema_version
+    ));
+    lines.push("</what_i_know>".to_string());
+    lines.push("<what_is_active>".to_string());
+    lines.push(
+        "- Fast startup mode skips the heavyweight full brief; use `munin memory-os brief --format prompt` when the complete Memory OS brief is needed."
+            .to_string(),
+    );
+    lines.push("</what_is_active>".to_string());
+    lines.push("<watchouts>".to_string());
+    lines.push(
+        "- Do not open raw transcripts unless this startup brief and Session Brain are insufficient."
+            .to_string(),
+    );
+    lines.push("</watchouts>".to_string());
+    lines.push("<startup_rules>".to_string());
+    lines.push("- Use `munin brain --format prompt` for live-session continuity.".to_string());
+    lines.push("- Use dedicated Memory OS commands for deeper user profile, friction, or historical recall.".to_string());
+    lines.push("</startup_rules>".to_string());
+    lines.push("</startup_memory_brief>".to_string());
+    lines.join("\n")
 }
 
 fn validate_format(format: &str) -> Result<()> {
@@ -3794,6 +3854,28 @@ mod tests {
     }
 
     #[test]
+    fn fast_startup_brief_renders_prompt_without_full_report_sections() {
+        let onboarding = crate::core::memory_os::MemoryOsOnboardingState {
+            schema_version: "memory-os-v1".to_string(),
+            status: "completed".to_string(),
+            started_at: None,
+            completed_at: None,
+            sessions_processed: 3836,
+            shells_ingested: 7700,
+            corrections_ingested: 12,
+            imported_sources: Vec::new(),
+            checkpoint_count: 42,
+            journal_event_count: 100,
+        };
+
+        let rendered = render_fast_startup_brief(MemoryOsInspectionScope::User, &onboarding);
+
+        assert!(rendered.contains("<startup_memory_brief scope=\"user\""));
+        assert!(rendered.contains("3836 sessions and 7700 shell executions"));
+        assert!(rendered.contains("Fast startup mode skips the heavyweight full brief"));
+    }
+
+    #[test]
     fn run_doctor_rejects_bad_format() {
         let err = run_doctor("user", None, "yaml", 0).expect_err("bad format should fail");
         assert!(err.to_string().contains("unsupported format"));
@@ -4058,9 +4140,9 @@ mod tests {
     fn brief_uses_user_prose_from_onboarding_checkpoint_before_project_fallback() {
         let _guard = ENV_LOCK.lock().expect("env lock");
         let (_tmp, tracker, _) = temp_tracker();
-        std::env::set_var("CONTEXT_MEMORYOS_JOURNAL_V1", "true");
-        std::env::set_var("CONTEXT_MEMORYOS_DUAL_WRITE_V1", "true");
-        std::env::set_var("CONTEXT_MEMORYOS_CHECKPOINT_V1", "true");
+        std::env::set_var("MUNIN_MEMORYOS_JOURNAL_V1", "true");
+        std::env::set_var("MUNIN_MEMORYOS_DUAL_WRITE_V1", "true");
+        std::env::set_var("MUNIN_MEMORYOS_CHECKPOINT_V1", "true");
 
         let prompt = "I want the broad Memory OS tool to show useful prose from user sessions.";
         tracker
@@ -4113,7 +4195,7 @@ mod tests {
                     ],
                     exclusions: Vec::new(),
                     reentry: crate::core::memory_os::MemoryOsCheckpointReentry {
-                        recommended_command: "context context".into(),
+                        recommended_command: "munin resume --format prompt".into(),
                         current_recommendation: Some(prompt.into()),
                         first_question: "What still matters from this session?".into(),
                         first_verification: "Verify the useful prose survives ranking.".into(),
@@ -4143,9 +4225,9 @@ mod tests {
             .chain(brief.what_is_active.iter())
             .any(|finding| finding.summary.contains("context proxy")));
 
-        std::env::remove_var("CONTEXT_MEMORYOS_JOURNAL_V1");
-        std::env::remove_var("CONTEXT_MEMORYOS_DUAL_WRITE_V1");
-        std::env::remove_var("CONTEXT_MEMORYOS_CHECKPOINT_V1");
+        std::env::remove_var("MUNIN_MEMORYOS_JOURNAL_V1");
+        std::env::remove_var("MUNIN_MEMORYOS_DUAL_WRITE_V1");
+        std::env::remove_var("MUNIN_MEMORYOS_CHECKPOINT_V1");
     }
 
     #[test]
@@ -4238,20 +4320,20 @@ mod tests {
         let _guard = ENV_LOCK.lock().expect("env lock");
         let (_tmp, tracker, _) = temp_tracker();
 
-        std::env::set_var("CONTEXT_MEMORYOS_READ_MODEL_V1", "true");
-        std::env::set_var("CONTEXT_MEMORYOS_RESUME_V1", "true");
-        std::env::set_var("CONTEXT_MEMORYOS_HANDOFF_V1", "true");
-        std::env::set_var("CONTEXT_MEMORYOS_STRICT_PROMOTION_V1", "true");
+        std::env::set_var("MUNIN_MEMORYOS_READ_MODEL_V1", "true");
+        std::env::set_var("MUNIN_MEMORYOS_RESUME_V1", "true");
+        std::env::set_var("MUNIN_MEMORYOS_HANDOFF_V1", "true");
+        std::env::set_var("MUNIN_MEMORYOS_STRICT_PROMOTION_V1", "true");
 
         let rendered = render_promotion_with_tracker(&tracker, "text").expect("promotion report");
 
         assert!(rendered.contains("Resume cutover: blocked"));
         assert!(rendered.contains("missing independent proposed-kernel proof"));
 
-        std::env::remove_var("CONTEXT_MEMORYOS_READ_MODEL_V1");
-        std::env::remove_var("CONTEXT_MEMORYOS_RESUME_V1");
-        std::env::remove_var("CONTEXT_MEMORYOS_HANDOFF_V1");
-        std::env::remove_var("CONTEXT_MEMORYOS_STRICT_PROMOTION_V1");
+        std::env::remove_var("MUNIN_MEMORYOS_READ_MODEL_V1");
+        std::env::remove_var("MUNIN_MEMORYOS_RESUME_V1");
+        std::env::remove_var("MUNIN_MEMORYOS_HANDOFF_V1");
+        std::env::remove_var("MUNIN_MEMORYOS_STRICT_PROMOTION_V1");
     }
 
     #[test]
@@ -4259,10 +4341,10 @@ mod tests {
         let _guard = ENV_LOCK.lock().expect("env lock");
         let (_tmp, tracker, _) = temp_tracker();
 
-        std::env::set_var("CONTEXT_MEMORYOS_READ_MODEL_V1", "true");
-        std::env::set_var("CONTEXT_MEMORYOS_RESUME_V1", "true");
-        std::env::set_var("CONTEXT_MEMORYOS_HANDOFF_V1", "true");
-        std::env::set_var("CONTEXT_MEMORYOS_STRICT_PROMOTION_V1", "true");
+        std::env::set_var("MUNIN_MEMORYOS_READ_MODEL_V1", "true");
+        std::env::set_var("MUNIN_MEMORYOS_RESUME_V1", "true");
+        std::env::set_var("MUNIN_MEMORYOS_HANDOFF_V1", "true");
+        std::env::set_var("MUNIN_MEMORYOS_STRICT_PROMOTION_V1", "true");
 
         for (idx, split) in ["test-private", "adversarial-private"].iter().enumerate() {
             tracker
@@ -4304,10 +4386,10 @@ mod tests {
             .iter()
             .all(|record| record.independent && record.contamination_free));
 
-        std::env::remove_var("CONTEXT_MEMORYOS_READ_MODEL_V1");
-        std::env::remove_var("CONTEXT_MEMORYOS_RESUME_V1");
-        std::env::remove_var("CONTEXT_MEMORYOS_HANDOFF_V1");
-        std::env::remove_var("CONTEXT_MEMORYOS_STRICT_PROMOTION_V1");
+        std::env::remove_var("MUNIN_MEMORYOS_READ_MODEL_V1");
+        std::env::remove_var("MUNIN_MEMORYOS_RESUME_V1");
+        std::env::remove_var("MUNIN_MEMORYOS_HANDOFF_V1");
+        std::env::remove_var("MUNIN_MEMORYOS_STRICT_PROMOTION_V1");
     }
 
     #[test]
