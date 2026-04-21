@@ -23,13 +23,7 @@ fn public_docs_do_not_publish_unsupported_munin_commands() {
             "site root does not exist: {}",
             root.display()
         );
-        for entry in std::fs::read_dir(&root).expect("site root") {
-            let entry = entry.expect("site entry");
-            let path = entry.path();
-            if path.extension().and_then(|ext| ext.to_str()) == Some("html") {
-                checked.push((path.display().to_string(), read(path)));
-            }
-        }
+        collect_html(&root, &mut checked);
     }
     if let Some(tracked_root) = tracked_site_root() {
         for file in [
@@ -61,6 +55,18 @@ fn public_docs_do_not_publish_unsupported_munin_commands() {
         "public docs contain unsupported Munin promises:\n{}",
         failures.join("\n")
     );
+}
+
+fn collect_html(root: &std::path::Path, checked: &mut Vec<(String, String)>) {
+    for entry in std::fs::read_dir(root).expect("site root") {
+        let entry = entry.expect("site entry");
+        let path = entry.path();
+        if path.is_dir() {
+            collect_html(&path, checked);
+        } else if path.extension().and_then(|ext| ext.to_str()) == Some("html") {
+            checked.push((path.display().to_string(), read(path)));
+        }
+    }
 }
 
 fn read(path: impl AsRef<std::path::Path>) -> String {

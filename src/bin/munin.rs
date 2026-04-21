@@ -945,41 +945,205 @@ fn run_release_doctor_checks(repo_root: Option<&str>, site_root: Option<&str>) -
 }
 
 fn assert_public_docs_parity(repo_root: &Path, site_root: Option<&Path>) -> Result<()> {
-    let banned = [
-        "munin init",
-        "munin gain",
-        "munin pack",
-        "munin vitest",
-        "munin cargo test",
-        "munin git diff",
-        "munin replay-eval",
-    ];
     let mut docs = vec![repo_root.join("README.md")];
     if let Some(site_root) = site_root {
-        for entry in fs::read_dir(site_root)
-            .with_context(|| format!("failed to read site root {}", site_root.display()))?
-        {
-            let path = entry?.path();
-            if path.extension().and_then(|ext| ext.to_str()) == Some("html") {
-                docs.push(path);
-            }
-        }
+        collect_public_html_docs(site_root, &mut docs)?;
     }
+    let mut failures = Vec::new();
     for path in docs {
         let content = fs::read_to_string(&path)
             .with_context(|| format!("failed to read {}", path.display()))?;
         let lowered = content.to_lowercase();
-        for banned in banned {
+        for banned in BANNED_PUBLIC_DOC_SNIPPETS {
             if lowered.contains(banned) {
-                anyhow::bail!(
-                    "release doctor failed: {} contains unsupported `{}`",
+                failures.push(format!(
+                    "{} contains unsupported `{}`",
                     path.display(),
                     banned
-                );
+                ));
+            }
+        }
+        let is_html = path.extension().and_then(|ext| ext.to_str()) == Some("html");
+        for command in extract_public_munin_commands(&content, is_html) {
+            let validation_command = public_doc_command_for_validation(&command);
+            if let Err(error) = validate_munin_command(&validation_command) {
+                failures.push(format!(
+                    "{} command `{}` is not resolvable: {:#}",
+                    path.display(),
+                    command,
+                    error
+                ));
             }
         }
     }
+    if !failures.is_empty() {
+        anyhow::bail!(
+            "release doctor failed: public docs contain unsupported Munin promises:\n{}",
+            failures.join("\n")
+        );
+    }
     Ok(())
+}
+
+fn collect_public_html_docs(root: &Path, docs: &mut Vec<PathBuf>) -> Result<()> {
+    for entry in fs::read_dir(root)
+        .with_context(|| format!("failed to read site root {}", root.display()))?
+    {
+        let path = entry?.path();
+        if path.is_dir() {
+            collect_public_html_docs(&path, docs)?;
+        } else if path.extension().and_then(|ext| ext.to_str()) == Some("html") {
+            docs.push(path);
+        }
+    }
+    Ok(())
+}
+
+const BANNED_PUBLIC_DOC_SNIPPETS: &[&str] = &[
+    "munin init",
+    "munin gain",
+    "munin pack",
+    "munin vitest",
+    "munin cargo test",
+    "munin git diff",
+    "munin replay-eval",
+];
+
+fn extract_public_munin_commands(content: &str, is_html: bool) -> Vec<String> {
+    let normalized = if is_html {
+        decode_public_doc_entities(&strip_html_tags(content))
+    } else {
+        decode_public_doc_entities(content)
+    };
+    let mut commands = Vec::new();
+    for raw_line in normalized.lines() {
+        let line = raw_line.trim();
+        if let Some(command) = extract_prompted_munin_command(line, !is_html) {
+            push_unique_command(&mut commands, command);
+        }
+        if !is_html {
+            for code_span in markdown_code_spans(line) {
+                if let Some(command) = extract_prompted_munin_command(code_span.trim(), true) {
+                    push_unique_command(&mut commands, command);
+                }
+            }
+        }
+    }
+    commands
+}
+
+fn push_unique_command(commands: &mut Vec<String>, command: String) {
+    if !commands.iter().any(|existing| existing == &command) {
+        commands.push(command);
+    }
+}
+
+fn extract_prompted_munin_command(line: &str, allow_bare_command: bool) -> Option<String> {
+    let mut candidate = line.trim();
+    let mut saw_prompt = false;
+    for prompt in ["$", ">", "#"] {
+        if let Some(stripped) = candidate.strip_prefix(prompt) {
+            candidate = stripped.trim_start();
+            saw_prompt = true;
+        }
+    }
+    if !saw_prompt && !allow_bare_command {
+        return None;
+    }
+    if !candidate.starts_with("munin ") {
+        return None;
+    }
+    Some(clean_public_munin_command(candidate))
+}
+
+fn clean_public_munin_command(command: &str) -> String {
+    let mut in_single_quote = false;
+    let mut in_double_quote = false;
+    let mut chars = command.char_indices().peekable();
+    while let Some((index, ch)) = chars.next() {
+        match ch {
+            '\'' if !in_double_quote => in_single_quote = !in_single_quote,
+            '"' if !in_single_quote => in_double_quote = !in_double_quote,
+            '`' if !in_single_quote && !in_double_quote => {
+                return command[..index].trim().to_string()
+            }
+            '#' if !in_single_quote && !in_double_quote => {
+                let previous_is_space = command[..index]
+                    .chars()
+                    .next_back()
+                    .map(|previous| previous.is_whitespace())
+                    .unwrap_or(false);
+                if previous_is_space {
+                    return command[..index].trim().to_string();
+                }
+            }
+            _ if !in_single_quote && !in_double_quote => {
+                if let Some((_, next)) = chars.peek() {
+                    if ch.is_whitespace() && *next == '$' {
+                        return command[..index].trim().to_string();
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    command
+        .trim()
+        .trim_end_matches([',', ';', '.'])
+        .trim()
+        .to_string()
+}
+
+fn public_doc_command_for_validation(command: &str) -> String {
+    command
+        .replace("<metric_key>", "metric_key")
+        .replace("<value>", "1")
+        .replace("<scope>", "default")
+        .replace("<topic>", "resolver")
+        .replace("<query>", "resolver")
+        .replace(
+            "<strategic-plan.context.json>",
+            "strategic-plan.context.json",
+        )
+        .replace("<published-site-root>", ".")
+}
+
+fn markdown_code_spans(line: &str) -> Vec<&str> {
+    line.split('`')
+        .enumerate()
+        .filter_map(|(index, part)| (index % 2 == 1).then_some(part))
+        .collect()
+}
+
+fn strip_html_tags(content: &str) -> String {
+    let mut stripped = String::with_capacity(content.len());
+    let mut in_tag = false;
+    for ch in content.chars() {
+        match ch {
+            '<' => {
+                in_tag = true;
+                stripped.push(' ');
+            }
+            '>' => {
+                in_tag = false;
+                stripped.push(' ');
+            }
+            _ if !in_tag => stripped.push(ch),
+            _ => {}
+        }
+    }
+    stripped
+}
+
+fn decode_public_doc_entities(content: &str) -> String {
+    content
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+        .replace("&apos;", "'")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&nbsp;", " ")
+        .replace("&amp;", "&")
 }
 
 fn session_brain_source_is_release_safe(source_status: &str) -> bool {
@@ -1589,8 +1753,18 @@ fn validate_munin_command(command: &str) -> Result<()> {
     args.remove(0);
     let mut argv = vec!["munin".to_string()];
     argv.extend(args);
-    Cli::try_parse_from(argv).with_context(|| format!("failed to parse `{command}`"))?;
-    Ok(())
+    match Cli::try_parse_from(argv) {
+        Ok(_) => Ok(()),
+        Err(error)
+            if matches!(
+                error.kind(),
+                clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion
+            ) =>
+        {
+            Ok(())
+        }
+        Err(error) => Err(error).with_context(|| format!("failed to parse `{command}`")),
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -2599,5 +2773,58 @@ mod tests {
         assert!(!session_brain_source_is_release_safe("stale-fallback"));
         assert!(session_brain_source_is_release_safe("fallback-latest"));
         assert!(session_brain_source_is_release_safe("live"));
+    }
+
+    #[test]
+    fn public_doc_command_extractor_handles_markdown_and_html() {
+        let markdown = [
+            "Run `munin doctor --scope user --format text` before shipping.",
+            "$ munin recall --format text \"resolver decisions\" # explain recall",
+        ]
+        .join("\n");
+        let commands = extract_public_munin_commands(&markdown, false);
+        assert_eq!(
+            commands,
+            vec![
+                "munin doctor --scope user --format text".to_string(),
+                "munin recall --format text \"resolver decisions\"".to_string(),
+            ]
+        );
+
+        let html = r#"
+          <pre><code><span class="c-prompt">$</span> <span class="c-cmd">munin promote &quot;use bun&quot;</span>
+          <span class="c-prompt">$</span> <span class="c-cmd">munin memory-os ingest --format text</span></code></pre>
+        "#;
+        let commands = extract_public_munin_commands(html, true);
+        assert_eq!(
+            commands,
+            vec![
+                "munin promote \"use bun\"".to_string(),
+                "munin memory-os ingest --format text".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn public_docs_parity_aggregates_banned_and_unresolvable_commands() {
+        let temp = tempfile::TempDir::new().expect("temp dir");
+        fs::write(
+            temp.path().join("README.md"),
+            [
+                "# Test",
+                "```",
+                "munin init",
+                "munin recall --format prompt resolver",
+                "```",
+            ]
+            .join("\n"),
+        )
+        .expect("write README");
+
+        let error = assert_public_docs_parity(temp.path(), None)
+            .expect_err("unsupported public docs should fail")
+            .to_string();
+        assert!(error.contains("munin init"));
+        assert!(error.contains("munin recall --format prompt resolver"));
     }
 }
