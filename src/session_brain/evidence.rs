@@ -1109,18 +1109,58 @@ fn normalize_classifier_text(text: &str) -> String {
         .join(" ")
 }
 
+fn normalized_contains_phrase(normalized: &str, phrase: &str) -> bool {
+    let phrase_tokens = phrase.split_whitespace().collect::<Vec<_>>();
+    let tokens = normalized.split_whitespace().collect::<Vec<_>>();
+    !phrase_tokens.is_empty()
+        && phrase_tokens.len() <= tokens.len()
+        && tokens
+            .windows(phrase_tokens.len())
+            .any(|window| window == phrase_tokens.as_slice())
+}
+
+fn normalized_starts_with_phrase(normalized: &str, phrase: &str) -> bool {
+    let phrase_tokens = phrase.split_whitespace().collect::<Vec<_>>();
+    let tokens = normalized.split_whitespace().collect::<Vec<_>>();
+    !phrase_tokens.is_empty()
+        && phrase_tokens.len() <= tokens.len()
+        && tokens.as_slice().starts_with(phrase_tokens.as_slice())
+}
+
 fn normalized_starts_with_any(text: &str, phrases: &[&str]) -> bool {
     let normalized = normalize_classifier_text(text);
-    phrases.iter().any(|phrase| normalized.starts_with(phrase))
+    phrases
+        .iter()
+        .any(|phrase| normalized_starts_with_phrase(&normalized, phrase))
 }
 
 fn normalized_contains_any(text: &str, phrases: &[&str]) -> bool {
     let normalized = normalize_classifier_text(text);
-    phrases.iter().any(|phrase| normalized.contains(phrase))
+    phrases
+        .iter()
+        .any(|phrase| normalized_contains_phrase(&normalized, phrase))
+}
+
+fn looks_like_negated_rejection(text: &str) -> bool {
+    normalized_contains_any(
+        text,
+        &[
+            "do not reject",
+            "don t reject",
+            "not reject",
+            "not rejected",
+            "is not rejected",
+            "isn t rejected",
+            "never reject",
+        ],
+    )
 }
 
 fn looks_like_rejection(text: &str) -> bool {
     let lowered = text.to_ascii_lowercase();
+    if looks_like_negated_rejection(text) {
+        return false;
+    }
     lowered.contains("reject")
         || lowered.contains("rejected")
         || lowered.contains("do not add")
@@ -1140,8 +1180,24 @@ fn looks_like_rejection(text: &str) -> bool {
         )
 }
 
+fn looks_like_non_decision(text: &str) -> bool {
+    normalized_contains_any(
+        text,
+        &[
+            "no decision",
+            "not a decision",
+            "not decided",
+            "nothing decided",
+            "undecided",
+        ],
+    )
+}
+
 fn looks_like_decision(text: &str) -> bool {
     let lowered = text.to_ascii_lowercase();
+    if looks_like_non_decision(text) {
+        return false;
+    }
     lowered.starts_with("decision:")
         || normalized_starts_with_any(
             text,
@@ -1485,6 +1541,30 @@ mod tests {
             .decisions
             .iter()
             .any(|item| item.summary.contains("Keep-step 4")));
+    }
+
+    #[test]
+    fn root_step_phrase_heuristics_ignore_negated_rejection_and_non_decision() {
+        let user = vec![message(
+            "user",
+            "Step 4 is not rejected; no decision yet on evidence.rs.",
+        )];
+
+        assert!(!looks_like_rejection(
+            "Step 4 is not rejected; no decision yet on evidence.rs."
+        ));
+        assert!(!looks_like_decision(
+            "Step 4 is not rejected; no decision yet on evidence.rs."
+        ));
+        assert!(!normalized_contains_any(
+            "microstep 4 rejected",
+            &["step 4 rejected"]
+        ));
+
+        let focus = build_session_focus(&user, &[]);
+
+        assert!(focus.rejections.is_empty());
+        assert!(focus.decisions.is_empty());
     }
 
     #[test]

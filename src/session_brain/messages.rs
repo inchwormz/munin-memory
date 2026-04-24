@@ -951,76 +951,130 @@ fn normalize_classifier_text(text: &str) -> String {
         .join(" ")
 }
 
+const STEP_DECISION_PHRASES: &[&str] = &[
+    "keeping step",
+    "keep step",
+    "keep the step",
+    "treat step",
+    "treat the step",
+];
+
+fn normalized_contains_phrase(normalized: &str, phrase: &str) -> bool {
+    let phrase_tokens = phrase.split_whitespace().collect::<Vec<_>>();
+    let tokens = normalized.split_whitespace().collect::<Vec<_>>();
+    !phrase_tokens.is_empty()
+        && phrase_tokens.len() <= tokens.len()
+        && tokens
+            .windows(phrase_tokens.len())
+            .any(|window| window == phrase_tokens.as_slice())
+}
+
+fn normalized_contains_any_phrase(normalized: &str, phrases: &[&str]) -> bool {
+    phrases
+        .iter()
+        .any(|phrase| normalized_contains_phrase(normalized, phrase))
+}
+
 fn contains_step_decision_phrase(lowered: &str) -> bool {
     let normalized = normalize_classifier_text(lowered);
-    [
-        "keeping step",
-        "keep step",
-        "keep the step",
-        "treat step",
-        "treat the step",
-    ]
-    .iter()
-    .any(|phrase| normalized.contains(phrase))
+    normalized_contains_any_phrase(&normalized, STEP_DECISION_PHRASES)
+}
+
+fn quote_closer(ch: char) -> Option<char> {
+    match ch {
+        '"' | '`' => Some(ch),
+        '\u{201c}' => Some('\u{201d}'),
+        _ => None,
+    }
+}
+
+fn quoted_span_contains_step_decision_phrase(text: &str) -> bool {
+    let mut close_quote = None;
+    let mut span = String::new();
+
+    for ch in text.chars() {
+        if let Some(expected) = close_quote {
+            if ch == expected {
+                let normalized = normalize_classifier_text(&span);
+                if normalized_contains_any_phrase(&normalized, STEP_DECISION_PHRASES) {
+                    return true;
+                }
+                span.clear();
+                close_quote = None;
+            } else {
+                span.push(ch);
+            }
+        } else if let Some(expected) = quote_closer(ch) {
+            close_quote = Some(expected);
+        }
+    }
+
+    false
 }
 
 fn step_phrase_is_reported_example(lowered: &str) -> bool {
     let normalized = normalize_classifier_text(lowered);
-    let mentions_step_phrase = [
-        "keeping step",
-        "keep step",
-        "keep the step",
-        "treat step",
-        "treat the step",
-    ]
-    .iter()
-    .any(|phrase| normalized.contains(phrase));
+    let mentions_step_phrase = normalized_contains_any_phrase(&normalized, STEP_DECISION_PHRASES);
     if !mentions_step_phrase {
         return false;
     }
-    let reports_phrase = [
-        "output says",
-        "text says",
-        "string says",
-        "phrase says",
-        "contains keep step",
-        "contains treat step",
-        "quoted keep step",
-        "quoted treat step",
-        "quote keep step",
-        "quote treat step",
-        "example keep step",
-        "example treat step",
-        "examples keep step",
-        "examples treat step",
-        "echoes keep step",
-        "echoes treat step",
-        "shows keep step",
-        "shows treat step",
-        "mentions keep step",
-        "mentions treat step",
-        "says keep step",
-        "says treat step",
-    ]
-    .iter()
-    .any(|phrase| normalized.contains(phrase));
-    let negates_step_phrase = [
-        "do not keep step",
-        "do not keep the step",
-        "do not treat step",
-        "do not treat the step",
-        "not keep step",
-        "not treat step",
-        "don t keep step",
-        "don t treat step",
-    ]
-    .iter()
-    .any(|phrase| normalized.contains(phrase));
-    let has_quotes = lowered.contains('"')
-        || lowered.contains('`')
-        || lowered.contains('\u{201c}')
-        || lowered.contains('\u{201d}');
-    reports_phrase || negates_step_phrase || has_quotes
+    let reports_phrase = normalized_contains_any_phrase(
+        &normalized,
+        &[
+            "output says",
+            "text says",
+            "string says",
+            "phrase says",
+            "contains keep step",
+            "contains treat step",
+            "quoted keep step",
+            "quoted treat step",
+            "quote keep step",
+            "quote treat step",
+            "example keep step",
+            "example treat step",
+            "examples keep step",
+            "examples treat step",
+            "echoes keep step",
+            "echoes treat step",
+            "shows keep step",
+            "shows treat step",
+            "mentions keep step",
+            "mentions treat step",
+            "says keep step",
+            "says treat step",
+        ],
+    );
+    let negates_step_phrase = normalized_contains_any_phrase(
+        &normalized,
+        &[
+            "do not keep step",
+            "do not keep the step",
+            "do not treat step",
+            "do not treat the step",
+            "not keep step",
+            "not keep the step",
+            "not keeping step",
+            "not keeping the step",
+            "not treat step",
+            "not treat the step",
+            "don t keep step",
+            "don t keep the step",
+            "don t treat step",
+            "don t treat the step",
+            "isn t keeping step",
+            "isn t keeping the step",
+            "never keep step",
+            "never keep the step",
+            "never keeping step",
+            "never keeping the step",
+            "avoid keep step",
+            "avoid keep the step",
+            "avoid keeping step",
+            "avoid keeping the step",
+        ],
+    );
+    reports_phrase || negates_step_phrase || quoted_span_contains_step_decision_phrase(lowered)
 }
 
 fn assistant_reports_decision(lowered: &str) -> bool {
@@ -1545,6 +1599,32 @@ mod tests {
         ));
         assert!(!assistant_text_is_material(
             "Do not keep step 4 in messages.rs."
+        ));
+    }
+
+    #[test]
+    fn assistant_materiality_preserves_real_step_decisions_with_quoted_targets() {
+        assert!(assistant_text_is_material(
+            "Keep step 4 in \"messages.rs\"."
+        ));
+        assert!(assistant_text_is_material(
+            "Treat the step 4 in `src/session_brain/evidence.rs`."
+        ));
+    }
+
+    #[test]
+    fn assistant_materiality_ignores_step_substrings_and_more_negations() {
+        assert!(!contains_step_decision_phrase(
+            "the bookkeeping step in messages.rs"
+        ));
+        assert!(!assistant_text_is_material(
+            "The bookkeeping step in messages.rs is noisy."
+        ));
+        assert!(!assistant_text_is_material(
+            "We are not keeping step 4 in messages.rs."
+        ));
+        assert!(!assistant_text_is_material(
+            "Never keep the step 4 in messages.rs."
         ));
     }
 }
