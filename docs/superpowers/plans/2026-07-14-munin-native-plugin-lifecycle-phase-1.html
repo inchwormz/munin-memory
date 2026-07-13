@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Munin Phase 1 — Native plugin lifecycle</title>
+  <style>
+    :root{color-scheme:light;--ink:#10233f;--muted:#52637a;--bg:#f3f7fb;--card:#fff;--line:#d9e3ee;--accent:#0b6e69;--warn:#b54708}
+    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+    header{background:#142e50;color:#fff;padding:54px max(24px,calc((100vw - 1120px)/2)) 50px} header p{max-width:850px;color:#dbe8f6;margin:.6rem 0 0}
+    main{max-width:1120px;margin:30px auto;padding:0 24px 56px}.measure,.card{background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:0 8px 24px rgba(16,35,63,.05)}
+    .measure{padding:24px;margin-bottom:20px}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.card{padding:24px;border-left:4px solid var(--accent)}
+    .n{display:inline-grid;place-items:center;width:32px;height:32px;border-radius:50%;background:#dff2ef;color:#085c58;font-weight:800}h1{font-size:clamp(2.1rem,5vw,3.8rem);line-height:1.06;margin:0}h2{margin:.45rem 0 .5rem;font-size:1.35rem}code{background:#edf3f8;border-radius:5px;padding:.1em .35em}.risk{border-left-color:var(--warn)}
+    footer{color:var(--muted);padding-top:24px}@media(max-width:760px){.grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <header><div>Munin 0.6 execution · Phase 1</div><h1>Become a native plugin</h1><p>Replace 76 unrecognized profile writes with one dual-host marketplace, transactional install/verify/uninstall, and a sub-second freshness-aware hook.</p></header>
+  <main>
+    <section class="measure"><strong>Verified starting point:</strong> Codex 0.144.3 and Claude 2.1.207 both report zero Munin plugins after the current installer writes 76 files. A minimal dual-host probe is recognized, enabled, and cleanly removed by both native managers.</section>
+    <div class="grid">
+      <section class="card"><span class="n">1</span><h2>One marketplace</h2><p>Track Codex and Claude catalogs plus one shared plugin payload. Ship only the umbrella and eight user-facing memory skills.</p><p><strong>Done:</strong> Claude strict validation and Codex native listing pass.</p></section>
+      <section class="card"><span class="n">2</span><h2>Transactional lifecycle</h2><p>Materialize the embedded payload, delegate to host CLIs, verify native identity, and record ownership.</p><p><strong>Done:</strong> partial failure restores exact pre-state.</p></section>
+      <section class="card"><span class="n">3</span><h2>No duplicate profiles</h2><p>Stop writing parallel skills, commands, plugin trees, and global hooks. Archive only positively identified legacy Munin files.</p><p><strong>Done:</strong> unrelated profile bytes are unchanged.</p></section>
+      <section class="card"><span class="n">4</span><h2>Bounded refresh</h2><p>Replace synchronous ingestion with a leased background worker and a truthful freshness receipt.</p><p><strong>Done:</strong> local quiet-machine return under one second.</p></section>
+      <section class="card"><span class="n">5</span><h2>Real-host proof</h2><p>Install, list, verify, roll back, uninstall, and compare isolated Codex and Claude profiles.</p><p><strong>Done:</strong> both profiles return exactly to pre-state.</p></section>
+      <section class="card risk"><h2>Deliberate boundary</h2><p>Phase 1 adds native plugin lifecycle. Phase 2 adds six typed local MCP tools. No push, tag, release, production profile mutation, or marketplace submission happens here.</p></section>
+    </div>
+    <footer>Detailed TDD steps: <code>docs/superpowers/plans/2026-07-14-munin-native-plugin-lifecycle-phase-1.md</code></footer>
+  </main>
+</body>
+</html>

@@ -140,3 +140,15 @@ Not rerun:
 - No tag, GitHub release, crates.io publish, or production install was created.
 
 Next: write and browser-host the Stage 1 native plugin lifecycle plan, starting from current Codex and Claude plugin specifications and isolated-profile discovery tests.
+
+### 2026-07-14 — Phase 1 orientation
+
+- **Verified false install:** current `munin install --force` wrote 76 files into an isolated profile, including a Codex `plugin.json`; both `codex plugin list --json` and `claude plugin list --json` contained zero Munin plugins.
+- **Verified host contracts:** local pins are Codex CLI `0.144.3` and Claude Code `2.1.207`. Codex exposes native marketplace/add/list/remove commands. Claude exposes strict validate, marketplace, install/list/details/eval/uninstall commands.
+- **Verified dual-host probe:** one scratch marketplace with `.agents/plugins/marketplace.json`, `.claude-plugin/marketplace.json`, two host manifests, and one shared skill installed successfully into both isolated host caches. Codex reported the plugin enabled at `0.5.14`; Claude reported one skill and about 18 always-on tokens.
+- **Verified cleanup:** native plugin removal plus marketplace removal returned both isolated profiles to zero installed plugins. Repeat installation was idempotent in both hosts.
+- **Root cause:** Munin writes plausible plugin-shaped files directly into profile directories but never registers a marketplace or asks either host's plugin manager to install them.
+- **Decision:** one tracked dual-host marketplace is the source of truth; the binary embeds/materializes it for local installation and delegates lifecycle state to the host managers.
+- **Decision:** native payload contains the umbrella plus eight memory skills, not installer/demo skills or duplicate Claude command files.
+- **Plan:** `docs/superpowers/plans/2026-07-14-munin-native-plugin-lifecycle-phase-1.md`.
+- **Next:** execute Task 1 red/green marketplace contract.
