@@ -147,8 +147,8 @@ if ($results.Status -contains "FAIL") {
 }
 
 if ($results.Status -contains "WARN") {
-    Write-Output "Next action: release is mechanically usable, but review the WARN items."
-    exit 0
+    Write-Output "Next action: fix the WARN items before trusting this release."
+    exit 1
 }
 
 Write-Output "Next action: release check is green."
