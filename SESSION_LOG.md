@@ -13,7 +13,7 @@ Turn Munin from a file-copying CLI integration into a first-class local memory t
 
 ## Progress measure
 
-**First-class gates proven: 0 / 10**
+**First-class gates proven: 3 / 10**
 
 1. Windows GNU build and tests pass.
 2. Doctor process exit matches its report status.
@@ -85,3 +85,58 @@ Verification artifact: release-candidate receipt proving install, inspect, retri
 - **Decision:** execute inline on the explicitly requested main checkout; do not create a worktree.
 - **Decision:** split the audit roadmap into independently verifiable phase plans. Phase 0 is detailed first because later plugin/MCP design must build on truthful process contracts.
 - **Next:** execute the Phase 0 TDD plan.
+
+### 2026-07-14 — Phase 0 checkpoint
+
+Source commits, in order:
+
+- `bb41958` — `docs: map Munin first-class execution`
+- `52f6554` — `fix: support both Windows Rust linkers`
+- `41fe2a3` — `fix: make doctor exit codes match health`
+- `5aeb0e0` — `fix: fail releases closed on warnings`
+- `43fd635` — `docs: make Munin release status explicit`
+
+Verified red/green receipts:
+
+- **Windows GNU RED:** isolated `cargo build --locked --target x86_64-pc-windows-gnu --bin munin` failed because GNU `ld.exe` received `/STACK:8388608` and reported `cannot find /STACK:8388608`.
+- **Windows GNU GREEN:** the exact build passed in 5.28 seconds after target-aware flags; the pre-check full GNU suite then passed 468 tests in 205.8 seconds.
+- **Doctor RED:** an isolated empty profile rendered JSON `overall_status: fail` but both command routes returned process code `0`.
+- **Doctor GREEN:** both `munin doctor` and `munin memory-os doctor` now return `2` for the same report. The stable mapping test proves `pass=0`, `warn=1`, `fail=2`, and unknown status is an error.
+- **Release judge RED:** the real PowerShell judge received parseable WARN results and returned `0`.
+- **Release judge GREEN:** the same fake-WARN path returns `1`. A real isolated unhealthy profile also returns `1`, after both 132-check install probes pass.
+- **Package truth GREEN:** `cargo package --locked --allow-dirty` assembled and verified 149 files, 2.0 MiB uncompressed and 378.7 KiB compressed. `publish = false` is restored; README and INSTALL explicitly distinguish crates.io `0.5.14` from GitHub `v0.5.13`.
+
+Fresh final gate after the last change:
+
+```text
+target: x86_64-pc-windows-gnu
+target dir: C:\Users\johnr\Documents\Codex\2026-07-14\goa\work\munin-phase0-final-target
+elapsed: 235.4 seconds
+tests: 420 + 17 + 4 + 5 + 1 + 1 + 24 doctests = 472 passed, 0 failed
+install check-resolvable: 132 resolver, skill, and fixture checks passed
+```
+
+Final release falsifier:
+
+```text
+[PASS] Binary
+[PASS] Install contract from repo (132 checks)
+[PASS] Install contract from temp folder (132 checks)
+[FAIL] Memory health
+[WARN] Promotion proof
+[PASS] Resolver routing
+exit: 1
+```
+
+Gate accounting:
+
+- Gates 1–3 are fully proven locally.
+- Gate 4 is **partially repaired, not counted**. Current metadata, docs, package policy, and package contents are truthful, but an eventual `0.6` candidate still needs one version/tag/artifact identity. Phase 0 deliberately did not manufacture or publish a tag.
+- Exact historical GitHub failure logs remain blocked: `gh auth status` reports no authenticated GitHub host. The May `0.5.14` CI cause is still unproven.
+
+Not rerun:
+
+- GitHub-hosted Windows MSVC, Linux, macOS, and the new Windows GNU workflow job were not run because this branch has not been pushed.
+- No tag, GitHub release, crates.io publish, or production install was created.
+
+Next: write and browser-host the Stage 1 native plugin lifecycle plan, starting from current Codex and Claude plugin specifications and isolated-profile discovery tests.
