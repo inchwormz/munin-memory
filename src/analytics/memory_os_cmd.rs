@@ -142,6 +142,32 @@ struct MemoryOsDoctorReport {
     recommended_permanent_fix: String,
 }
 
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum MemoryOsDoctorStatus {
+    Pass,
+    Warn,
+    Fail,
+}
+
+impl MemoryOsDoctorStatus {
+    pub fn exit_code(self) -> i32 {
+        match self {
+            Self::Pass => 0,
+            Self::Warn => 1,
+            Self::Fail => 2,
+        }
+    }
+
+    fn from_report_status(status: &str) -> Result<Self> {
+        match status {
+            "pass" => Ok(Self::Pass),
+            "warn" => Ok(Self::Warn),
+            "fail" => Ok(Self::Fail),
+            unknown => Err(anyhow!("unknown Memory OS Doctor status `{unknown}`")),
+        }
+    }
+}
+
 struct LoadedOnboardingStatus {
     status: MemoryOsInspectOnboardingStatus,
     imported_ids: HashMap<String, HashSet<String>>,
@@ -547,7 +573,7 @@ pub fn run_doctor(
     project_path: Option<&str>,
     format: &str,
     _verbose: u8,
-) -> Result<()> {
+) -> Result<MemoryOsDoctorStatus> {
     validate_format(format)?;
     let scope = validate_scope(scope, project_path)?;
     crate::analytics::session_backfill::refresh_memory_os_session_import_before_read()?;
@@ -558,7 +584,7 @@ pub fn run_doctor(
         "text" => println!("{}", render_doctor_text(&report)),
         _ => unreachable!("format is validated before report rendering"),
     }
-    Ok(())
+    MemoryOsDoctorStatus::from_report_status(&report.overall_status)
 }
 
 pub fn run_brief(
@@ -3954,6 +3980,14 @@ mod tests {
     fn run_doctor_rejects_bad_format() {
         let err = run_doctor("user", None, "yaml", 0).expect_err("bad format should fail");
         assert!(err.to_string().contains("unsupported format"));
+    }
+
+    #[test]
+    fn doctor_status_exit_codes_are_stable() {
+        assert_eq!(MemoryOsDoctorStatus::Pass.exit_code(), 0);
+        assert_eq!(MemoryOsDoctorStatus::Warn.exit_code(), 1);
+        assert_eq!(MemoryOsDoctorStatus::Fail.exit_code(), 2);
+        assert!(MemoryOsDoctorStatus::from_report_status("unknown").is_err());
     }
 
     #[test]

@@ -709,11 +709,12 @@ fn run_cli() -> Result<i32> {
             repo_root,
             site_root,
         } => {
-            analytics::memory_os_cmd::run_doctor(&scope, None, &format, cli.verbose)?;
+            let doctor_status =
+                analytics::memory_os_cmd::run_doctor(&scope, None, &format, cli.verbose)?;
             if release {
                 run_release_doctor_checks(repo_root.as_deref(), site_root.as_deref())?;
             }
-            0
+            doctor_status.exit_code()
         }
         Commands::MemoryOs { command } => run_memory_os(command, cli.verbose)?,
         Commands::Strategy { command } => run_strategy(command)?,
@@ -1184,7 +1185,11 @@ fn run_memory_os(command: MemoryOsCommands, verbose: u8) -> Result<i32> {
             scope,
             project,
             format,
-        } => analytics::memory_os_cmd::run_doctor(&scope, project.as_deref(), &format, verbose)?,
+        } => {
+            let doctor_status =
+                analytics::memory_os_cmd::run_doctor(&scope, project.as_deref(), &format, verbose)?;
+            return Ok(doctor_status.exit_code());
+        }
         MemoryOsCommands::Profile {
             scope,
             project,
