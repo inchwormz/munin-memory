@@ -1,5 +1,22 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+- Crate publishing is disabled in repository metadata until a release is
+  explicitly approved.
+- Public documentation now distinguishes the published `0.5.14` crate from the
+  latest GitHub release, `v0.5.13`.
+
+### Fixed
+
+- Windows builds select the stack-size linker flag for the target environment,
+  so both MSVC and GNU linkers receive valid arguments.
+- Memory OS Doctor now returns process status `0` for pass, `1` for warn, and
+  `2` for fail through both CLI routes.
+- The release check now fails closed when any check reports WARN or FAIL.
+
 ## 0.5.13 - 2026-05-10
 
 ### Added

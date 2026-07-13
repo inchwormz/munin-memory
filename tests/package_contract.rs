@@ -7,12 +7,28 @@ fn cargo_toml_marks_crate_apache_licensed() {
             .any(|line| line.trim() == r#"license = "Apache-2.0""#),
         "Cargo.toml must declare the Apache-2.0 license"
     );
+}
+
+#[test]
+fn release_posture_is_truthful() {
+    let manifest = std::fs::read_to_string("Cargo.toml").expect("Cargo.toml");
     assert!(
-        !manifest
+        manifest
             .lines()
             .any(|line| line.trim() == "publish = false"),
-        "Munin should be publishable during the 0.5 customer-testing cutover"
+        "publishing must stay disabled until the release is explicitly approved"
     );
+
+    let readme = std::fs::read_to_string("README.md").expect("README.md");
+    assert!(readme.contains("Published crate: `0.5.14`."));
+    assert!(readme.contains("Latest GitHub release: `v0.5.13`."));
+
+    let install = std::fs::read_to_string("INSTALL.md").expect("INSTALL.md");
+    assert!(!install.contains("Current testing build: `v0.5.1`."));
+    assert!(install.contains("Repository package version: `0.5.14`."));
+
+    let changelog = std::fs::read_to_string("CHANGELOG.md").expect("CHANGELOG.md");
+    assert!(changelog.contains("## [Unreleased]"));
 }
 
 #[test]

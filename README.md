@@ -10,7 +10,10 @@ commands, and Codex skills. It is designed for developers who want agents to
 remember active work, repeated mistakes, strategic priorities, and unfinished
 tasks without sending that memory to a hosted service.
 
-Current release: `v0.5.13`.
+Published crate: `0.5.14`.
+Latest GitHub release: `v0.5.13`.
+The next release candidate is unreleased. Crate publishing is disabled in this
+checkout until that release is explicitly approved.
 
 [![CI](https://github.com/inchwormz/munin-memory/actions/workflows/ci.yml/badge.svg)](https://github.com/inchwormz/munin-memory/actions/workflows/ci.yml)
 [![Crates.io](https://img.shields.io/crates/v/munin-memory.svg)](https://crates.io/crates/munin-memory)
@@ -317,8 +320,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\munin-release-check.ps1
 
 The check verifies the binary, install contract from the repo, install contract
 from a temporary folder, memory health, promotion proof, and resolver routing.
-`WARN` means Munin is mechanically usable but has a follow-up to review. `FAIL`
-means fix the named item before trusting the release.
+`WARN` and `FAIL` both return a non-zero process status. Fix every named item
+before trusting the release.
 
 ## Privacy And Storage
 

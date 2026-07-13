@@ -2,7 +2,9 @@
 
 Use this repo as the Munin CLI source of truth.
 
-Current testing build: `v0.5.1`.
+Repository package version: `0.5.14`.
+Latest GitHub release: `v0.5.13`. This checkout includes unreleased work, and
+crate publishing remains disabled until the next release is explicitly approved.
 
 ## Build
 

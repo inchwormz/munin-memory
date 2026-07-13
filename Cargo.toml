@@ -4,6 +4,7 @@ version = "0.5.14"
 edition = "2021"
 rust-version = "1.78"
 autobins = false
+publish = false
 authors = ["John McKeown"]
 description = "Local memory system for agent-driven development"
 license = "Apache-2.0"
