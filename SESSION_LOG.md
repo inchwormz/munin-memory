@@ -151,4 +151,7 @@ Next: write and browser-host the Stage 1 native plugin lifecycle plan, starting 
 - **Decision:** one tracked dual-host marketplace is the source of truth; the binary embeds/materializes it for local installation and delegates lifecycle state to the host managers.
 - **Decision:** native payload contains the umbrella plus eight memory skills, not installer/demo skills or duplicate Claude command files.
 - **Plan:** `docs/superpowers/plans/2026-07-14-munin-native-plugin-lifecycle-phase-1.md`.
-- **Next:** execute Task 1 red/green marketplace contract.
+- **Task 1 RED:** the repository contract test failed because `.agents/plugins/marketplace.json` did not exist.
+- **Task 1 GREEN:** the tracked dual-host marketplace contains exactly the nine user-facing memory skills; `cargo fmt --check` and the targeted GNU contract test pass; `claude plugin validate --strict .` passes.
+- **Real-host proof:** isolated Codex `0.144.3` and Claude Code `2.1.207` profiles each installed and listed `munin-memory@munin-memory` version `0.5.14` as enabled. Native uninstall plus marketplace removal returned both profiles to zero Munin plugins.
+- **Next:** commit Task 1, then execute the transactional host lifecycle task red-first.

@@ -1,0 +1,36 @@
+{
+  "name": "munin-memory",
+  "version": "0.5.14",
+  "description": "Local, evidence-backed memory for coding agents.",
+  "author": {
+    "name": "John McKeown"
+  },
+  "homepage": "https://muninmemory.com",
+  "repository": "https://github.com/inchwormz/munin-memory",
+  "license": "Apache-2.0",
+  "keywords": [
+    "memory",
+    "agents",
+    "codex",
+    "local-first"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Munin Memory",
+    "shortDescription": "Local memory, recall, friction, and proof for Codex",
+    "longDescription": "Munin compiles local Codex and Claude sessions into evidence-backed memory surfaces for continuity, recall, repeated friction, next steps, and health checks.",
+    "developerName": "John McKeown",
+    "category": "Engineering",
+    "capabilities": [
+      "Interactive",
+      "Read"
+    ],
+    "websiteURL": "https://muninmemory.com",
+    "defaultPrompt": [
+      "Recall what we decided about this project",
+      "What keeps going wrong in my agent sessions?"
+    ],
+    "brandColor": "#142E50",
+    "screenshots": []
+  }
+}

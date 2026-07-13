@@ -1,0 +1,15 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "munin-memory",
+  "description": "Local, evidence-backed memory for coding agents.",
+  "owner": {
+    "name": "John McKeown"
+  },
+  "plugins": [
+    {
+      "name": "munin-memory",
+      "source": "./plugins/munin-memory",
+      "description": "Recall prior work, inspect current context, surface repeated friction, and verify local Memory OS health."
+    }
+  ]
+}

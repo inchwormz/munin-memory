@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "munin-memory",
+  "version": "0.5.14",
+  "description": "Local, evidence-backed memory for coding agents.",
+  "author": {
+    "name": "John McKeown"
+  },
+  "homepage": "https://muninmemory.com",
+  "repository": "https://github.com/inchwormz/munin-memory",
+  "license": "Apache-2.0",
+  "keywords": [
+    "memory",
+    "agents",
+    "claude-code",
+    "local-first"
+  ],
+  "skills": "./skills/"
+}
