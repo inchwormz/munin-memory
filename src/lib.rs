@@ -1,3 +1,4 @@
+pub mod agent_hook;
 pub mod agent_plugin;
 pub mod analytics;
 pub mod core;

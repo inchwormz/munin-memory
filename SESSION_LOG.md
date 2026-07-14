@@ -163,4 +163,11 @@ Next: write and browser-host the Stage 1 native plugin lifecycle plan, starting 
 - **Task 3 GREEN:** positively identified legacy files move to a timestamped `.munin/migration-backups` tree after native install succeeds. Original Claude settings and Codex hooks are backed up before only Munin-owned entries are pruned.
 - **Preservation proof:** unrelated Claude/Codex hook entries and the Claude `theme` value survived. An unknown `munin-custom` skill remained untouched and appeared in the receipt conflict list.
 - **Verification:** all four `agent_plugin_contract` tests passed on `x86_64-pc-windows-gnu`.
-- **Next:** commit Task 3, then replace the still-shipped blocking hook assets and their obsolete direct-writer helpers with the bounded plugin hook.
+- **Task 4 RED:** `munin hook` did not exist, and the repository lacked both native plugin hook manifests and the shared script.
+- **Task 4 GREEN:** `munin hook session-start` returns a versioned freshness receipt, acquires a short lease, queues a hidden worker, and exits. The worker runs incremental `memory-os ingest --check-now`, records pass/fail truth, preserves the last known successful refresh, and clears the lease.
+- **Failure proof:** forced worker failure produced `munin.agent-hook-status.v1` with `status=fail`, `last_refresh_at=null`, and `last_error=forced hook worker failure`; the next session-start receipt surfaced `status=refresh-failed`.
+- **Latency proof:** the pinned GNU debug binary returned the session-start receipt in 55 ms on the quiet local machine. The automated ceiling remains two seconds.
+- **Shipped-hook proof:** Node syntax check, Claude strict validation, and repository assertions prove there is no `spawnSync`, 120-second timeout, or direct ingestion command in the plugin hook assets.
+- **Cleanup:** removed 1,098 lines of unreachable direct installer/global-hook code and replaced the old generated-asset check with validation of the embedded native marketplace. `cargo check` is warning-free.
+- **Verification:** all five `agent_plugin_contract` tests plus the generated-skill resolver contract passed on `x86_64-pc-windows-gnu`.
+- **Next:** commit Task 4, then build the isolated real-host lifecycle gate and public install documentation.

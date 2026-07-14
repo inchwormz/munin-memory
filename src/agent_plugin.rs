@@ -31,6 +31,18 @@ const BUNDLE_FILES: &[(&str, &str)] = &[
         include_str!("../plugins/munin-memory/.claude-plugin/plugin.json"),
     ),
     (
+        "plugins/munin-memory/hooks.json",
+        include_str!("../plugins/munin-memory/hooks.json"),
+    ),
+    (
+        "plugins/munin-memory/hooks/hooks.json",
+        include_str!("../plugins/munin-memory/hooks/hooks.json"),
+    ),
+    (
+        "plugins/munin-memory/scripts/munin-session-start.js",
+        include_str!("../plugins/munin-memory/scripts/munin-session-start.js"),
+    ),
+    (
         "plugins/munin-memory/skills/munin/SKILL.md",
         include_str!("../plugins/munin-memory/skills/munin/SKILL.md"),
     ),
@@ -67,6 +79,47 @@ const BUNDLE_FILES: &[(&str, &str)] = &[
         include_str!("../plugins/munin-memory/skills/munin-resume/SKILL.md"),
     ),
 ];
+
+pub fn validate_embedded_bundle() -> Result<usize> {
+    let codex_marketplace: Value =
+        serde_json::from_str(include_str!("../.agents/plugins/marketplace.json"))?;
+    let claude_marketplace: Value =
+        serde_json::from_str(include_str!("../.claude-plugin/marketplace.json"))?;
+    let codex_plugin: Value = serde_json::from_str(include_str!(
+        "../plugins/munin-memory/.codex-plugin/plugin.json"
+    ))?;
+    let claude_plugin: Value = serde_json::from_str(include_str!(
+        "../plugins/munin-memory/.claude-plugin/plugin.json"
+    ))?;
+    for marketplace in [&codex_marketplace, &claude_marketplace] {
+        if marketplace.get("name").and_then(Value::as_str) != Some(MARKETPLACE_NAME) {
+            bail!("embedded marketplace name does not match {MARKETPLACE_NAME}");
+        }
+    }
+    for plugin in [&codex_plugin, &claude_plugin] {
+        if plugin.get("name").and_then(Value::as_str) != Some("munin-memory")
+            || plugin.get("version").and_then(Value::as_str) != Some(env!("CARGO_PKG_VERSION"))
+        {
+            bail!("embedded plugin identity/version does not match Cargo metadata");
+        }
+    }
+    for hooks in [
+        include_str!("../plugins/munin-memory/hooks.json"),
+        include_str!("../plugins/munin-memory/hooks/hooks.json"),
+    ] {
+        let value: Value = serde_json::from_str(hooks)?;
+        if value.pointer("/hooks/SessionStart/0/hooks/0/timeout") != Some(&Value::from(2)) {
+            bail!("embedded session-start hook must use a two-second timeout");
+        }
+    }
+    let script = include_str!("../plugins/munin-memory/scripts/munin-session-start.js");
+    for forbidden in ["spawnSync", "memory-os ingest", "timeout\": 120"] {
+        if script.contains(forbidden) {
+            bail!("embedded session-start script contains forbidden {forbidden}");
+        }
+    }
+    Ok(BUNDLE_FILES.len())
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 pub enum AgentPluginFormat {

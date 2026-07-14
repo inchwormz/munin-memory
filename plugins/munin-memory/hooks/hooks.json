@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/munin-session-start.js\"",
+            "timeout": 2,
+            "statusMessage": "Checking Munin memory freshness"
+          }
+        ]
+      }
+    ]
+  }
+}

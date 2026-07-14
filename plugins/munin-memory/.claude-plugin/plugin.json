@@ -15,5 +15,6 @@
     "claude-code",
     "local-first"
   ],
-  "skills": "./skills/"
+  "skills": "./skills/",
+  "hooks": "./hooks/hooks.json"
 }

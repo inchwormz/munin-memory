@@ -3,6 +3,7 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
+use std::time::{Duration, Instant};
 
 const MARKETPLACE_NAME: &str = "munin-memory";
 const PLUGIN_NAME: &str = "munin-memory";
@@ -87,6 +88,21 @@ fn repository_marketplace_is_dual_host() {
             .all(|name| !name.starts_with("munin-install")),
         "installer/demo skills do not belong in the runtime plugin"
     );
+
+    let codex_hooks =
+        fs::read_to_string(plugin_root.join("hooks.json")).expect("Codex native plugin hooks");
+    let claude_hooks = fs::read_to_string(plugin_root.join("hooks/hooks.json"))
+        .expect("Claude native plugin hooks");
+    let session_start =
+        fs::read_to_string(plugin_root.join("scripts").join("munin-session-start.js"))
+            .expect("shared session-start hook");
+    for shipped_hook in [&codex_hooks, &claude_hooks, &session_start] {
+        assert!(!shipped_hook.contains("spawnSync"));
+        assert!(!shipped_hook.contains("timeout\": 120"));
+        assert!(!shipped_hook.contains("memory-os ingest"));
+    }
+    assert!(session_start.contains("hook"));
+    assert!(session_start.contains("session-start"));
 
     let cargo_manifest = fs::read_to_string(root.join("Cargo.toml")).expect("Cargo.toml");
     for packaged_path in [
@@ -517,4 +533,67 @@ fn migration_preserves_unrelated_state_and_backs_up_munin_files() {
     assert!(serde_json::to_string(&migrated_codex)
         .expect("serialize Codex hooks")
         .contains("unrelated-codex.py"));
+}
+
+fn run_hook(profile: &Path, fail_worker: bool) -> (Output, Duration) {
+    let started = Instant::now();
+    let mut command = Command::new(env!("CARGO_BIN_EXE_munin"));
+    command
+        .args(["hook", "session-start", "--format", "json"])
+        .env("MUNIN_DATA_DIR", profile.join("data"))
+        .env("MUNIN_CONFIG_DIR", profile.join("config"))
+        .env("MUNIN_SESSION_HOME", profile.join("sessions"));
+    if fail_worker {
+        command.env("MUNIN_HOOK_WORKER_TEST_FAIL", "1");
+    }
+    let output = command.output().expect("run session-start hook");
+    (output, started.elapsed())
+}
+
+fn wait_for_worker_status(profile: &Path, expected: &str) -> Value {
+    let path = profile.join("data/agent-hook/status.json");
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        if let Ok(contents) = fs::read_to_string(&path) {
+            let value: Value = serde_json::from_str(&contents).expect("worker status JSON");
+            if value["status"] == expected {
+                return value;
+            }
+        }
+        assert!(
+            Instant::now() < deadline,
+            "worker did not report {expected}"
+        );
+        std::thread::sleep(Duration::from_millis(20));
+    }
+}
+
+#[test]
+fn hook_session_start_is_bounded_and_failure_is_visible() {
+    let profile = tempfile::tempdir().expect("isolated hook profile");
+    let (output, elapsed) = run_hook(profile.path(), true);
+    let receipt = assert_success(&output, "session-start hook");
+    assert!(
+        elapsed < Duration::from_secs(2),
+        "session-start took {:?}",
+        elapsed
+    );
+    assert_eq!(receipt["schema"], "munin.agent-hook-receipt.v1");
+    assert_eq!(receipt["refresh_queued"], true);
+    assert!(receipt.get("generated_at").is_some());
+    assert!(receipt.get("last_refresh_at").is_some());
+    assert!(receipt.get("age_seconds").is_some());
+
+    let worker = wait_for_worker_status(profile.path(), "fail");
+    assert!(worker["last_error"]
+        .as_str()
+        .expect("worker error")
+        .contains("forced hook worker failure"));
+
+    let (next_output, next_elapsed) = run_hook(profile.path(), true);
+    let next = assert_success(&next_output, "session-start after worker failure");
+    assert!(next_elapsed < Duration::from_secs(2));
+    assert_eq!(next["status"], "refresh-failed");
+    assert_eq!(next["last_refresh_at"], Value::Null);
+    assert_eq!(next["age_seconds"], Value::Null);
 }
