@@ -576,7 +576,6 @@ pub fn run_doctor(
 ) -> Result<MemoryOsDoctorStatus> {
     validate_format(format)?;
     let scope = validate_scope(scope, project_path)?;
-    crate::analytics::session_backfill::refresh_memory_os_session_import_before_read()?;
     let tracker = Tracker::new().context("Failed to initialize tracking database")?;
     let report = build_doctor_report(&tracker, scope, project_path)?;
     match format {

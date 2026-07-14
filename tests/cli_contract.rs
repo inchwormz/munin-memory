@@ -83,3 +83,30 @@ fn doctor_failure_returns_exit_two() {
         );
     }
 }
+
+#[test]
+fn doctor_reads_compiled_state_without_refreshing_session_import() {
+    for args in [
+        &["doctor", "--format", "json"][..],
+        &["memory-os", "doctor", "--format", "json"][..],
+    ] {
+        let profile = tempfile::tempdir().expect("temp profile");
+        let started = std::time::Instant::now();
+        let output = munin_in_empty_profile(args, profile.path());
+        let elapsed = started.elapsed();
+        assert_eq!(output.status.code(), Some(2), "munin {args:?}");
+        assert!(
+            elapsed < std::time::Duration::from_secs(2),
+            "munin {args:?} exceeded the fast Doctor ceiling: {elapsed:?}"
+        );
+        for refresh_state in [
+            "memory_os_session_onboarding.json",
+            "memory_os_session_onboarding.lock.sqlite",
+        ] {
+            assert!(
+                !profile.path().join("data").join(refresh_state).exists(),
+                "munin {args:?} implicitly refreshed session import and wrote {refresh_state}"
+            );
+        }
+    }
+}

@@ -231,3 +231,8 @@ Next: write and browser-host the Stage 1 native plugin lifecycle plan, starting 
 - **Boundary inventory:** native host lifecycle (`src/agent_plugin.rs`) and MCP protocol/adapters (`src/mcp.rs`, `src/mcp_tools.rs`) are already separated. Stage 3 adds one privacy lifecycle boundary and does not perform speculative rewrites of the remaining large modules.
 - **Plan:** `docs/superpowers/plans/2026-07-14-munin-trust-scale-phase-3.md`; browser plan verified HTTP 200 at the adjacent `.html` URL.
 - **Next:** commit the Stage 3 plan, then add the Doctor no-refresh falsifier before changing the call path.
+- **Task 1 RED:** both Doctor routes wrote `memory_os_session_onboarding.json` and its lock database in an empty isolated profile. The real user-corpus route exceeded 180 seconds and about 1.1 GB because diagnosis invoked session import first.
+- **Task 1 root cause:** `run_doctor` called `refresh_memory_os_session_import_before_read()` immediately before the existing fast compiled-state report builder. The performance failure was import work, not Doctor's checks or renderer.
+- **Task 1 GREEN:** Doctor no longer imports or repairs sessions. A process contract requires both routes to stay under two seconds, preserve exit `2` for an empty unhealthy profile, and create neither onboarding state nor import-lock files.
+- **Real-corpus proof:** the rebuilt GNU debug binary inspected 75 imported sessions in `649 ms`, returned report status `warn` with exit `1`, and wrote a 4,661-byte JSON report. This is a greater-than-276x latency reduction from the bounded 180-second witness; no session import ran.
+- **Next:** commit the fast Doctor mechanism, then begin the isolated privacy lifecycle RED.
