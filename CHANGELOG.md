@@ -20,6 +20,10 @@
 - A nonblocking session-start freshness hook with a detached incremental worker,
   lease recovery, and explicit failure status.
 - An isolated real-host release gate for Codex and Claude native plugin state.
+- A synchronous MCP `2025-11-25` stdio server with six strict read-only memory
+  tools and the versioned `munin.mcp.result.v1` response envelope.
+- Native Claude and Codex MCP declarations plus an isolated host gate that
+  proves a broken runtime is rejected before accepting the connected surface.
 
 ### Fixed
 
@@ -28,6 +32,9 @@
 - Memory OS Doctor now returns process status `0` for pass, `1` for warn, and
   `2` for fail through both CLI routes.
 - The release check now fails closed when any check reports WARN or FAIL.
+- Claude no longer loads its standard plugin hook file twice.
+- MCP resource discovery returns explicit empty surfaces, avoiding host startup
+  warnings when Munin exposes tools but no resources.
 
 ## 0.5.13 - 2026-05-10
 

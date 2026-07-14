@@ -60,14 +60,21 @@ timestamped `~/.munin/migration-backups/` directory. Unknown Munin-named files
 remain in place and are reported as conflicts.
 
 The current local compatibility proof uses Codex CLI `0.144.3` and Claude Code
-`2.1.207`. Typed MCP memory tools are planned for the next phase; this phase
-ships the nine memory skills and bounded session-start refresh hook.
+`2.1.207`. Six read-only MCP tools (`search`, `session_summary`,
+`project_state`, `friction`, `strategy_status`, and `health`) ship beside the
+nine memory skills and bounded session-start refresh hook. Agents receive a
+strict `munin.mcp.result.v1` response with provenance, freshness, sensitivity,
+warnings, and coverage receipts.
 
 For a clean-profile real-host proof:
 
 ```powershell
 pwsh -NoProfile -File .\scripts\munin-agent-plugin-check.ps1 -MuninBin <fresh-munin-binary>
+pwsh -NoProfile -File .\scripts\munin-mcp-host-check.ps1 -MuninBin <fresh-munin-binary>
 ```
+
+The MCP host check proves its own judge first with a broken runtime, then
+requires Claude to connect and Codex to list all six tools and call `health`.
 
 End users should treat `munin` as the only supported runtime-context CLI.
 Context may still exist as an internal local developer tool during migration,

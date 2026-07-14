@@ -66,15 +66,49 @@ fn agent_plugin_check_script_is_packaged() {
 }
 
 #[test]
+fn typed_mcp_distribution_is_packaged_and_documented() {
+    let manifest = std::fs::read_to_string("Cargo.toml").expect("Cargo.toml");
+    for path in [
+        "/src/mcp.rs",
+        "/src/mcp_tools.rs",
+        "/tests/mcp_contract.rs",
+        "/scripts/munin-mcp-host-check.ps1",
+    ] {
+        assert!(
+            manifest.contains(path),
+            "Cargo.toml include list must package {path}"
+        );
+    }
+
+    let readme = std::fs::read_to_string("README.md").expect("README.md");
+    assert!(readme.contains("## Typed MCP Memory Tools"));
+    assert!(readme.contains("scripts\\munin-mcp-host-check.ps1"));
+
+    let install = std::fs::read_to_string("INSTALL.md").expect("INSTALL.md");
+    assert!(!install.contains("Typed MCP memory tools are planned"));
+    assert!(install.contains("Six read-only MCP tools"));
+
+    let release =
+        std::fs::read_to_string("scripts/munin-release-check.ps1").expect("release check");
+    assert!(release.contains("MCP protocol smoke"));
+}
+
+#[test]
 fn release_check_fails_closed_on_warnings() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let fake_munin = temp_dir.path().join("fake-munin.ps1");
     std::fs::write(
         &fake_munin,
-        r#"param([Parameter(ValueFromRemainingArguments = $true)][string[]]$CliArgs)
+        r#"$CliArgs = @($args)
+$ProtocolInput = @($input)
 $command = $CliArgs -join " "
 if ($command -eq "install --check-resolvable") {
     Write-Output "resolver, skill, and fixture checks passed"
+    exit 0
+}
+if ($command -eq "mcp serve") {
+    Write-Output '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-11-25","capabilities":{"tools":{}},"serverInfo":{"name":"munin-memory","version":"0.5.14"}}}'
+    Write-Output '{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"search","annotations":{"readOnlyHint":true}},{"name":"session_summary","annotations":{"readOnlyHint":true}},{"name":"project_state","annotations":{"readOnlyHint":true}},{"name":"friction","annotations":{"readOnlyHint":true}},{"name":"strategy_status","annotations":{"readOnlyHint":true}},{"name":"health","annotations":{"readOnlyHint":true}}]}}'
     exit 0
 }
 if ($CliArgs[0] -eq "doctor") {

@@ -138,6 +138,26 @@ The plugin supplies nine skills: `munin`, `munin-brain`, `munin-doctor`,
 `munin-recall`, and `munin-resume`. Its session-start hook returns a freshness
 receipt immediately and queues incremental ingestion in a detached worker.
 
+## Typed MCP Memory Tools
+
+The native plugin also starts Munin as a local Model Context Protocol (MCP)
+server. Six read-only tools give Codex and Claude structured access to compiled
+memory without opening raw transcripts:
+
+- `search` — ranked evidence-backed memory search;
+- `session_summary` — one exact session identity, never fuzzy matching;
+- `project_state` — claims, open loops, checkpoints, and next actions;
+- `friction` — repeated failure patterns and permanent-fix pointers;
+- `strategy_status` — goal, KPI, initiative, and instrumentation state;
+- `health` — fast compiled-substrate health without an import refresh.
+
+Every result uses the versioned `munin.mcp.result.v1` envelope and includes
+provenance, freshness, sensitivity, warnings, and an explicit
+`found/returned/dropped/limit` coverage receipt. Tool schemas are strict,
+read-only, idempotent, and closed-world. Secret-shaped values are redacted
+before output. The server speaks MCP `2025-11-25` over stdio and accepts the
+supported older protocol pins used by current hosts.
+
 ## First Run
 
 Run ingestion once after installing agent surfaces:
@@ -251,11 +271,15 @@ For an isolated proof against the installed Codex and Claude CLIs:
 
 ```powershell
 pwsh -NoProfile -File .\scripts\munin-agent-plugin-check.ps1 -MuninBin <fresh-munin-binary>
+pwsh -NoProfile -File .\scripts\munin-mcp-host-check.ps1 -MuninBin <fresh-munin-binary>
 ```
 
 The gate proves install, native list/details, Munin verify, forced partial
 rollback, bounded refresh, uninstall, and semantic equality between native
-pre-state and post-state.
+pre-state and post-state. The MCP gate first substitutes a deliberately broken
+runtime and requires both hosts to reject it; it then requires Claude to
+connect, Codex to list exactly six tools, and a Codex-native `health` call to
+return `munin.mcp.result.v1`.
 
 ## Non-Technical Release Check
 
@@ -263,12 +287,14 @@ For a plain PASS/WARN/FAIL readout before trusting a local build, run:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\munin-release-check.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\munin-release-check.ps1 -NativeMcpHosts
 ```
 
-The check verifies the binary, install contract from the repo, install contract
-from a temporary folder, memory health, promotion proof, and resolver routing.
-`WARN` and `FAIL` both return a non-zero process status. Fix every named item
-before trusting the release.
+The default check verifies the binary, install contract from the repo and a
+temporary folder, MCP protocol/tool schema, memory health, promotion proof, and
+resolver routing. `-NativeMcpHosts` also runs the isolated real-host falsifier
+against installed Codex and Claude CLIs. `WARN` and `FAIL` both return a
+non-zero process status. Fix every named item before trusting the release.
 
 ## Privacy And Storage
 
@@ -298,8 +324,8 @@ The current supported install path is:
 
 The repository and binary both contain the same dual-host marketplace. The
 local gate currently pins Codex CLI `0.144.3` and Claude Code `2.1.207`.
-Typed MCP tools are intentionally deferred to the next implementation phase;
-the current plugin exposes skills and the bounded freshness hook.
+The current plugin exposes nine skills, the bounded freshness hook, and six
+typed read-only MCP tools through both native hosts.
 
 ## Development
 
@@ -308,6 +334,7 @@ Repository layout:
 - `src/bin/munin.rs` - CLI entrypoint
 - `src/agent_plugin.rs` - native marketplace lifecycle, rollback, and migration
 - `src/agent_hook.rs` - bounded freshness hook and detached refresh worker
+- `src/mcp.rs` and `src/mcp_tools.rs` - MCP protocol boundary and typed adapters
 - `plugins/munin-memory/` - shared Codex/Claude plugin payload
 - `src/analytics/` - Memory OS read surfaces and session ingestion
 - `src/core/` - durable tracking, Memory OS, strategy, proactivity, and resolver
