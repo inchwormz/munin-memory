@@ -221,3 +221,13 @@ Next: write and browser-host the Stage 1 native plugin lifecycle plan, starting 
 - **Scale finding:** an accidental release-check run against the real user corpus left `munin doctor` active beyond three minutes at roughly 1.1 GB working set. The bounded run was stopped and is not a passing result. Stage 3 must diagnose this path before calling the health surface production-grade.
 - **Package proof:** all seven package-contract tests passed. `cargo package --locked --allow-dirty` packaged and verified 175 files, 2.1 MiB uncompressed and 408.2 KiB compressed. The package list contains both MCP source files, `tests/mcp_contract.rs`, the host gate, and both plugin declarations.
 - **Next:** commit Task 4, then start the Stage 3 privacy/lifecycle/trust/scale plan with the real-corpus Doctor performance failure as the first reproduced bug.
+
+### 2026-07-14 — Phase 3 orientation
+
+- **Verified scale RED:** the top-level Doctor route still calls `refresh_memory_os_session_import_before_read()` before a report builder explicitly designed as a fast compiled-state check. On the real corpus it exceeded 180 seconds, consumed about 1.1 GB, and was stopped; no pass is claimed.
+- **Verified lifecycle gap:** the CLI has no export or forget surface. `tracking.history_days` is configurable but automatic cleanup still uses the hard-coded 90-day constant.
+- **Verified policy gap:** the repository has no `SECURITY.md`, threat model, data lifecycle, or incident-response document.
+- **Verified CI gap:** stable build/test, licenses, and Windows GNU exist; warnings-denied clippy, locked Rust 1.78, advisories, migration, and provenance gates do not.
+- **Boundary inventory:** native host lifecycle (`src/agent_plugin.rs`) and MCP protocol/adapters (`src/mcp.rs`, `src/mcp_tools.rs`) are already separated. Stage 3 adds one privacy lifecycle boundary and does not perform speculative rewrites of the remaining large modules.
+- **Plan:** `docs/superpowers/plans/2026-07-14-munin-trust-scale-phase-3.md`; browser plan verified HTTP 200 at the adjacent `.html` URL.
+- **Next:** commit the Stage 3 plan, then add the Doctor no-refresh falsifier before changing the call path.
