@@ -159,4 +159,8 @@ Next: write and browser-host the Stage 1 native plugin lifecycle plan, starting 
 - **Rollback proof:** a fake Claude install failure after a successful Codex install returned non-zero and removed only the Codex plugin/marketplace and Claude marketplace created by that transaction. The isolated host state returned to four absent state markers.
 - **Idempotence proof:** a repeat install reported `bundle_created=false`, `created_marketplace=false`, and `created_plugin=false`.
 - **Verification:** the two lifecycle tests and the filtered installer suite passed on `x86_64-pc-windows-gnu`. The compiler now reports the old direct-write installer as dead code; Task 3 removes it and adds reversible migration.
-- **Next:** commit Task 2, then add the migration-preservation test before deleting the duplicate installer path.
+- **Task 3 RED:** native installation left direct Codex/Claude skills, commands, plugin files, and blocking hook entries active; no migration backup was reported.
+- **Task 3 GREEN:** positively identified legacy files move to a timestamped `.munin/migration-backups` tree after native install succeeds. Original Claude settings and Codex hooks are backed up before only Munin-owned entries are pruned.
+- **Preservation proof:** unrelated Claude/Codex hook entries and the Claude `theme` value survived. An unknown `munin-custom` skill remained untouched and appeared in the receipt conflict list.
+- **Verification:** all four `agent_plugin_contract` tests passed on `x86_64-pc-windows-gnu`.
+- **Next:** commit Task 3, then replace the still-shipped blocking hook assets and their obsolete direct-writer helpers with the bounded plugin hook.

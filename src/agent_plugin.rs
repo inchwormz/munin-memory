@@ -162,8 +162,17 @@ pub struct LifecycleReceipt {
     pub dry_run: bool,
     pub files: Vec<BundleFileReceipt>,
     pub hosts: Vec<HostReceipt>,
+    pub migration: MigrationReceipt,
     pub rollback_actions: Vec<String>,
     pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Default, Serialize)]
+pub struct MigrationReceipt {
+    pub backup_path: Option<String>,
+    pub moved_paths: Vec<String>,
+    pub updated_configs: Vec<String>,
+    pub conflicts: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -241,6 +250,7 @@ pub fn run_lifecycle(request: LifecycleRequest) -> Result<LifecycleOutcome> {
         dry_run: request.dry_run,
         files: bundle_receipts(),
         hosts: Vec::new(),
+        migration: MigrationReceipt::default(),
         rollback_actions: Vec::new(),
         warnings: Vec::new(),
     };
@@ -288,6 +298,19 @@ pub fn run_lifecycle(request: LifecycleRequest) -> Result<LifecycleOutcome> {
             break;
         }
         receipt.hosts.push(host_receipt);
+    }
+
+    if !failed && request.action == LifecycleAction::Install && !request.dry_run {
+        match migrate_legacy_integration(&install_home) {
+            Ok(migration) => receipt.migration = migration,
+            Err(error) => {
+                receipt.status = "fail";
+                receipt
+                    .warnings
+                    .push(format!("legacy integration migration: {error:#}"));
+                failed = true;
+            }
+        }
     }
 
     if failed && request.action == LifecycleAction::Install && !request.dry_run {
@@ -801,6 +824,308 @@ fn marketplace_remove_args(host: AgentHost) -> Vec<&'static OsStr> {
 
 fn os(value: &'static str) -> &'static OsStr {
     OsStr::new(value)
+}
+
+const KNOWN_LEGACY_SKILLS: &[&str] = &[
+    "munin",
+    "munin-brain",
+    "munin-doctor",
+    "munin-friction",
+    "munin-hygiene",
+    "munin-nudge",
+    "munin-prove",
+    "munin-recall",
+    "munin-resume",
+    "munin-install-check",
+    "munin-install-preview",
+    "munin-install-codex",
+    "munin-install-claude-preview",
+    "munin-install-claude",
+    "munin-memory-os-ingest",
+    "munin-proactive",
+    "munin-strategy",
+    "munin-discover",
+    "munin-gain",
+    "munin-learn",
+    "munin-memory-os-brief",
+    "munin-memory-os-friction",
+    "munin-memory-os-inspect",
+    "munin-memory-os-overview",
+    "munin-memory-os-profile",
+    "munin-memory-os-promotion",
+    "munin-rewrite",
+];
+
+fn migrate_legacy_integration(install_home: &Path) -> Result<MigrationReceipt> {
+    let backup_root = install_home
+        .join(".munin")
+        .join("migration-backups")
+        .join(Utc::now().format("%Y%m%dT%H%M%S%.3fZ").to_string());
+    let mut receipt = MigrationReceipt::default();
+    let mut candidates = Vec::<PathBuf>::new();
+
+    for skill_root in [
+        install_home.join(".codex").join("skills"),
+        install_home.join(".claude").join("skills"),
+    ] {
+        if !skill_root.is_dir() {
+            continue;
+        }
+        for entry in fs::read_dir(&skill_root)
+            .with_context(|| format!("failed to read {}", skill_root.display()))?
+        {
+            let entry = entry?;
+            let name = entry.file_name().to_string_lossy().to_string();
+            if !KNOWN_LEGACY_SKILLS.contains(&name.as_str()) {
+                if name.starts_with("munin") {
+                    receipt
+                        .conflicts
+                        .push(relative_display(install_home, &entry.path()));
+                }
+                continue;
+            }
+            let path = entry.path();
+            if entry.file_type()?.is_dir() && owned_text_file(&path.join("SKILL.md"), "munin")? {
+                candidates.push(path);
+            } else {
+                receipt
+                    .conflicts
+                    .push(relative_display(install_home, &path));
+            }
+        }
+    }
+
+    let command_root = install_home.join(".claude").join("commands");
+    if command_root.is_dir() {
+        for entry in fs::read_dir(&command_root)
+            .with_context(|| format!("failed to read {}", command_root.display()))?
+        {
+            let entry = entry?;
+            let path = entry.path();
+            let stem = path.file_stem().and_then(OsStr::to_str).unwrap_or_default();
+            if KNOWN_LEGACY_SKILLS.contains(&stem)
+                && entry.file_type()?.is_file()
+                && owned_text_file(&path, "munin")?
+            {
+                candidates.push(path);
+            } else if stem.starts_with("munin") {
+                receipt
+                    .conflicts
+                    .push(relative_display(install_home, &path));
+            }
+        }
+    }
+
+    let codex_plugin = install_home
+        .join(".codex")
+        .join("plugins")
+        .join("munin-memory");
+    if codex_plugin.exists() {
+        let manifest = codex_plugin.join(".codex-plugin").join("plugin.json");
+        if owned_plugin_manifest(&manifest)? {
+            candidates.push(codex_plugin);
+        } else {
+            receipt
+                .conflicts
+                .push(relative_display(install_home, &codex_plugin));
+        }
+    }
+
+    for hook in ["munin-runtime.js", "munin-session-start.js"] {
+        let path = install_home.join(".claude").join("hooks").join(hook);
+        if !path.exists() {
+            continue;
+        }
+        if owned_text_file(&path, "munin")? {
+            candidates.push(path);
+        } else {
+            receipt
+                .conflicts
+                .push(relative_display(install_home, &path));
+        }
+    }
+
+    let mut moved = Vec::<PathBuf>::new();
+    let mut original_configs = Vec::<(PathBuf, Vec<u8>)>::new();
+    let result = (|| -> Result<()> {
+        for source in candidates {
+            let relative = source
+                .strip_prefix(install_home)
+                .with_context(|| format!("{} is outside install home", source.display()))?
+                .to_path_buf();
+            let destination = backup_root.join(&relative);
+            if let Some(parent) = destination.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            fs::rename(&source, &destination).with_context(|| {
+                format!(
+                    "failed to move legacy path {} to {}",
+                    source.display(),
+                    destination.display()
+                )
+            })?;
+            receipt
+                .moved_paths
+                .push(relative.to_string_lossy().replace('\\', "/"));
+            moved.push(relative);
+        }
+
+        for config in [
+            install_home.join(".claude").join("settings.json"),
+            install_home.join(".codex").join("hooks.json"),
+        ] {
+            migrate_hook_config(
+                install_home,
+                &backup_root,
+                &config,
+                &mut receipt,
+                &mut original_configs,
+            )?;
+        }
+        Ok(())
+    })();
+
+    if let Err(error) = result {
+        rollback_migration(install_home, &backup_root, &moved, &original_configs);
+        return Err(error);
+    }
+
+    if !receipt.moved_paths.is_empty() || !receipt.updated_configs.is_empty() {
+        receipt.backup_path = Some(backup_root.display().to_string());
+        fs::create_dir_all(&backup_root)?;
+        fs::write(
+            backup_root.join("migration.json"),
+            serde_json::to_vec_pretty(&receipt)?,
+        )?;
+    }
+    Ok(receipt)
+}
+
+fn migrate_hook_config(
+    install_home: &Path,
+    backup_root: &Path,
+    path: &Path,
+    receipt: &mut MigrationReceipt,
+    original_configs: &mut Vec<(PathBuf, Vec<u8>)>,
+) -> Result<()> {
+    if !path.exists() {
+        return Ok(());
+    }
+    let original = fs::read(path).with_context(|| format!("failed to read {}", path.display()))?;
+    let mut value: Value = serde_json::from_slice(&original)
+        .with_context(|| format!("failed to parse {}", path.display()))?;
+    if prune_munin_hook_entries(&mut value) == 0 {
+        return Ok(());
+    }
+    let relative = path
+        .strip_prefix(install_home)
+        .with_context(|| format!("{} is outside install home", path.display()))?
+        .to_path_buf();
+    let backup = backup_root.join(&relative);
+    if let Some(parent) = backup.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(&backup, &original)
+        .with_context(|| format!("failed to back up {}", path.display()))?;
+    original_configs.push((path.to_path_buf(), original));
+    write_json_atomically(path, &value)?;
+    receipt
+        .updated_configs
+        .push(relative.to_string_lossy().replace('\\', "/"));
+    Ok(())
+}
+
+fn prune_munin_hook_entries(value: &mut Value) -> usize {
+    let Some(events) = value.get_mut("hooks").and_then(Value::as_object_mut) else {
+        return 0;
+    };
+    let mut removed = 0usize;
+    for entries in events.values_mut() {
+        let Some(entries) = entries.as_array_mut() else {
+            continue;
+        };
+        let before = entries.len();
+        entries.retain(|entry| !contains_owned_munin_hook(entry));
+        removed += before - entries.len();
+    }
+    removed
+}
+
+fn contains_owned_munin_hook(value: &Value) -> bool {
+    match value {
+        Value::Object(map) => map.iter().any(|(key, value)| {
+            if key == "command" {
+                value.as_str().is_some_and(is_owned_munin_hook_command)
+            } else {
+                contains_owned_munin_hook(value)
+            }
+        }),
+        Value::Array(items) => items.iter().any(contains_owned_munin_hook),
+        _ => false,
+    }
+}
+
+fn is_owned_munin_hook_command(command: &str) -> bool {
+    let normalized = command.replace('\\', "/").to_ascii_lowercase();
+    normalized.contains("munin-runtime.js")
+        || normalized.contains("munin-session-start.js")
+        || (normalized.contains("munin") && normalized.contains("memory-os ingest"))
+}
+
+fn owned_text_file(path: &Path, marker: &str) -> Result<bool> {
+    if !path.is_file() {
+        return Ok(false);
+    }
+    let contents =
+        fs::read_to_string(path).with_context(|| format!("failed to read {}", path.display()))?;
+    Ok(contents
+        .to_ascii_lowercase()
+        .contains(&marker.to_ascii_lowercase()))
+}
+
+fn owned_plugin_manifest(path: &Path) -> Result<bool> {
+    if !path.is_file() {
+        return Ok(false);
+    }
+    let value: Value = serde_json::from_slice(
+        &fs::read(path).with_context(|| format!("failed to read {}", path.display()))?,
+    )
+    .with_context(|| format!("failed to parse {}", path.display()))?;
+    Ok(value.get("name").and_then(Value::as_str) == Some("munin-memory"))
+}
+
+fn rollback_migration(
+    install_home: &Path,
+    backup_root: &Path,
+    moved: &[PathBuf],
+    original_configs: &[(PathBuf, Vec<u8>)],
+) {
+    for (path, contents) in original_configs.iter().rev() {
+        let _ = fs::write(path, contents);
+    }
+    for relative in moved.iter().rev() {
+        let source = backup_root.join(relative);
+        let destination = install_home.join(relative);
+        if let Some(parent) = destination.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+        let _ = fs::rename(source, destination);
+    }
+}
+
+fn relative_display(root: &Path, path: &Path) -> String {
+    path.strip_prefix(root)
+        .unwrap_or(path)
+        .to_string_lossy()
+        .replace('\\', "/")
+}
+
+fn write_json_atomically(path: &Path, value: &Value) -> Result<()> {
+    let temp = path.with_extension(format!("json.tmp-{}", std::process::id()));
+    fs::write(&temp, serde_json::to_vec_pretty(value)?)
+        .with_context(|| format!("failed to write {}", temp.display()))?;
+    fs::rename(&temp, path).with_context(|| format!("failed to replace {}", path.display()))?;
+    Ok(())
 }
 
 fn write_receipt(path: &Path, receipt: &LifecycleReceipt) -> Result<()> {

@@ -344,3 +344,177 @@ fn lifecycle_partial_failure_rolls_back_created_codex_state() {
     assert!(codex_log.contains("plugin remove munin-memory@munin-memory"));
     assert!(codex_log.contains("plugin marketplace remove munin-memory"));
 }
+
+fn write_profile_file(root: &Path, relative: &str, contents: &str) {
+    let path = root.join(relative);
+    fs::create_dir_all(path.parent().expect("profile file parent")).expect("create profile parent");
+    fs::write(path, contents).expect("write profile fixture");
+}
+
+#[test]
+fn migration_preserves_unrelated_state_and_backs_up_munin_files() {
+    let profile = tempfile::tempdir().expect("isolated install profile");
+    let hosts_root = tempfile::tempdir().expect("fake host root");
+    let hosts = write_fake_hosts(hosts_root.path());
+    write_profile_file(
+        profile.path(),
+        ".codex/skills/munin-recall/SKILL.md",
+        "---\nname: munin-recall\n---\nRun munin recall.\n",
+    );
+    write_profile_file(
+        profile.path(),
+        ".codex/plugins/munin-memory/.codex-plugin/plugin.json",
+        r#"{"name":"munin-memory","version":"0.5.14"}"#,
+    );
+    write_profile_file(
+        profile.path(),
+        ".claude/skills/munin-brain/SKILL.md",
+        "---\nname: munin-brain\n---\nRun munin brain.\n",
+    );
+    write_profile_file(
+        profile.path(),
+        ".claude/skills/munin-custom/SKILL.md",
+        "---\nname: munin-custom\n---\nUser-owned content.\n",
+    );
+    write_profile_file(
+        profile.path(),
+        ".claude/commands/munin-recall.md",
+        "Invoke the Munin skill and run munin recall.\n",
+    );
+    write_profile_file(
+        profile.path(),
+        ".claude/hooks/munin-session-start.js",
+        "spawnSync('munin', ['memory-os', 'ingest']);\n",
+    );
+
+    let unrelated_claude = serde_json::json!({
+        "matcher": "startup",
+        "hooks": [{
+            "type": "command",
+            "command": "node C:/tools/unrelated-claude.js",
+            "timeout": 7
+        }]
+    });
+    let claude_settings = serde_json::json!({
+        "theme": "dark",
+        "hooks": {
+            "SessionStart": [
+                {
+                    "matcher": "startup",
+                    "hooks": [{
+                        "type": "command",
+                        "command": "node C:/profile/.claude/hooks/munin-session-start.js",
+                        "timeout": 120
+                    }]
+                },
+                unrelated_claude.clone()
+            ]
+        }
+    });
+    write_profile_file(
+        profile.path(),
+        ".claude/settings.json",
+        &serde_json::to_string_pretty(&claude_settings).expect("Claude settings JSON"),
+    );
+
+    let unrelated_codex = serde_json::json!({
+        "matcher": "startup",
+        "hooks": [{
+            "type": "command",
+            "command": "python C:/tools/unrelated-codex.py",
+            "timeout": 9
+        }]
+    });
+    let codex_hooks = serde_json::json!({
+        "hooks": {
+            "SessionStart": [
+                {
+                    "matcher": "startup|resume|clear",
+                    "hooks": [{
+                        "type": "command",
+                        "command": "\"C:/bin/munin.exe\" memory-os ingest --check-now --format json",
+                        "timeout": 120
+                    }]
+                },
+                unrelated_codex.clone()
+            ]
+        }
+    });
+    write_profile_file(
+        profile.path(),
+        ".codex/hooks.json",
+        &serde_json::to_string_pretty(&codex_hooks).expect("Codex hooks JSON"),
+    );
+
+    let install = assert_success(
+        &run_lifecycle(
+            profile.path(),
+            &hosts,
+            &["plugin", "install", "--format", "json"],
+            false,
+        ),
+        "plugin install with migration",
+    );
+    let backup = PathBuf::from(
+        install["migration"]["backup_path"]
+            .as_str()
+            .expect("migration backup path"),
+    );
+    for relative in [
+        ".codex/skills/munin-recall/SKILL.md",
+        ".codex/plugins/munin-memory/.codex-plugin/plugin.json",
+        ".claude/skills/munin-brain/SKILL.md",
+        ".claude/commands/munin-recall.md",
+        ".claude/hooks/munin-session-start.js",
+    ] {
+        assert!(
+            !profile.path().join(relative).exists(),
+            "legacy path remains active: {relative}"
+        );
+        assert!(
+            backup.join(relative).is_file(),
+            "legacy path was not backed up: {relative}"
+        );
+    }
+    assert!(
+        profile
+            .path()
+            .join(".claude/skills/munin-custom/SKILL.md")
+            .is_file(),
+        "unknown Munin-named path must remain untouched"
+    );
+    assert!(
+        install["migration"]["conflicts"]
+            .as_array()
+            .expect("migration conflicts")
+            .iter()
+            .any(|value| value.as_str() == Some(".claude/skills/munin-custom")),
+        "unknown Munin-named path must be reported as a conflict"
+    );
+
+    let migrated_claude: Value = serde_json::from_str(
+        &fs::read_to_string(profile.path().join(".claude/settings.json"))
+            .expect("migrated Claude settings"),
+    )
+    .expect("parse migrated Claude settings");
+    let migrated_codex: Value = serde_json::from_str(
+        &fs::read_to_string(profile.path().join(".codex/hooks.json"))
+            .expect("migrated Codex hooks"),
+    )
+    .expect("parse migrated Codex hooks");
+    assert_eq!(migrated_claude["theme"], "dark");
+    assert_eq!(
+        migrated_claude["hooks"]["SessionStart"],
+        serde_json::json!([unrelated_claude])
+    );
+    assert_eq!(
+        migrated_codex["hooks"]["SessionStart"],
+        serde_json::json!([unrelated_codex])
+    );
+    assert!(serde_json::to_string(&migrated_claude)
+        .expect("serialize Claude settings")
+        .contains("unrelated-claude.js"));
+    assert!(serde_json::to_string(&migrated_codex)
+        .expect("serialize Codex hooks")
+        .contains("unrelated-codex.py"));
+}
