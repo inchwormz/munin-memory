@@ -191,3 +191,9 @@ Next: write and browser-host the Stage 1 native plugin lifecycle plan, starting 
 - **Premortem check:** the Stage 2 host gate first installs a broken executable declaration and must observe both hosts fail. A host check that cannot detect the broken server is rejected as false-green.
 - **Plan:** `docs/superpowers/plans/2026-07-14-munin-typed-mcp-phase-2.md` plus the browser plan at the adjacent `.html` path.
 - **Next:** Task 1 RED — run the black-box lifecycle test against the absent `munin mcp serve` command and prove the judge rejects silence.
+- **Task 1 instrument correction:** the first GNU test attempt never reached Munin because `dlltool.exe` was absent from this shell's PATH. Pinning `C:\msys64\mingw64\bin` reached the actual subject; the instrument failure is not counted as product RED.
+- **Task 1 RED:** both black-box tests failed against the current binary. `munin mcp serve` was an unrecognized subcommand, and malformed input produced process failure plus no JSON-RPC error response.
+- **Task 1 GREEN:** `munin mcp serve` now implements synchronous newline-delimited JSON-RPC with initialize/version negotiation, initialized notifications, ping, tools/list, deterministic errors, and protocol-only stdout. It lists exactly six fixed read-only tools.
+- **Compatibility proof:** the server advertises MCP `2025-11-25` and echoes a supported `2025-06-18` client version. Unsupported versions negotiate to the current server pin.
+- **Verification:** `tests/mcp_contract.rs` passed `2 / 2`; the focused unit compatibility test passed `1 / 1`; the command completed with exit `0` after EOF.
+- **Next:** commit Task 1, then seed the typed six-tool corpus and capture the expected Task 2 RED.

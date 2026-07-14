@@ -1,8 +1,8 @@
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use munin_memory::{
-    agent_hook, agent_plugin, analytics, core, proactivity_cmd, runtime_context, session_brain,
-    strategy_cmd,
+    agent_hook, agent_plugin, analytics, core, mcp, proactivity_cmd, runtime_context,
+    session_brain, strategy_cmd,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -161,6 +161,12 @@ enum Commands {
         command: HookCommands,
     },
 
+    /// Serve Munin's read-only local memory tools over MCP
+    Mcp {
+        #[command(subcommand)]
+        command: McpCommands,
+    },
+
     /// Resolve a natural-language request to the Munin read surface that should answer it
     Resolve {
         #[arg(short, long, default_value = "text")]
@@ -281,6 +287,12 @@ enum HookCommands {
     /// Run the detached incremental refresh worker
     #[command(hide = true)]
     RefreshWorker,
+}
+
+#[derive(Subcommand)]
+enum McpCommands {
+    /// Serve newline-delimited JSON-RPC over standard input/output
+    Serve,
 }
 
 #[derive(Subcommand)]
@@ -753,6 +765,12 @@ fn run_cli() -> Result<i32> {
             }
             HookCommands::RefreshWorker => {
                 agent_hook::refresh_worker()?;
+                0
+            }
+        },
+        Commands::Mcp { command } => match command {
+            McpCommands::Serve => {
+                mcp::serve_stdio()?;
                 0
             }
         },
