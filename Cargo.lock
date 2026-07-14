@@ -784,7 +784,7 @@ dependencies = [
 
 [[package]]
 name = "munin-memory"
-version = "0.5.14"
+version = "0.6.0-rc.1"
 dependencies = [
  "anyhow",
  "automod",

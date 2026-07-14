@@ -22,13 +22,18 @@ fn release_posture_is_truthful() {
     let readme = std::fs::read_to_string("README.md").expect("README.md");
     assert!(readme.contains("Published crate: `0.5.14`."));
     assert!(readme.contains("Latest GitHub release: `v0.5.13`."));
+    assert!(readme.contains("Local release candidate: `0.6.0-rc.1`"));
 
     let install = std::fs::read_to_string("INSTALL.md").expect("INSTALL.md");
     assert!(!install.contains("Current testing build: `v0.5.1`."));
-    assert!(install.contains("Repository package version: `0.5.14`."));
+    assert!(install.contains("Repository package version: `0.6.0-rc.1`"));
 
     let changelog = std::fs::read_to_string("CHANGELOG.md").expect("CHANGELOG.md");
     assert!(changelog.contains("## [Unreleased]"));
+
+    let candidate =
+        std::fs::read_to_string("docs/release/v0.6.0-rc.1.md").expect("candidate release notes");
+    assert!(candidate.contains("tag: not created; approval required"));
 }
 
 #[test]
@@ -271,7 +276,7 @@ if ($command -eq "install --check-resolvable") {
     exit 0
 }
 if ($command -eq "mcp serve") {
-    Write-Output '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-11-25","capabilities":{"tools":{}},"serverInfo":{"name":"munin-memory","version":"0.5.14"}}}'
+    Write-Output '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-11-25","capabilities":{"tools":{}},"serverInfo":{"name":"munin-memory","version":"0.6.0-rc.1"}}}'
     Write-Output '{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"search","annotations":{"readOnlyHint":true}},{"name":"session_summary","annotations":{"readOnlyHint":true}},{"name":"project_state","annotations":{"readOnlyHint":true}},{"name":"friction","annotations":{"readOnlyHint":true}},{"name":"strategy_status","annotations":{"readOnlyHint":true}},{"name":"health","annotations":{"readOnlyHint":true}}]}}'
     exit 0
 }

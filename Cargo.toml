@@ -1,6 +1,6 @@
 [package]
 name = "munin-memory"
-version = "0.5.14"
+version = "0.6.0-rc.1"
 edition = "2021"
 rust-version = "1.78"
 autobins = false
@@ -26,6 +26,7 @@ include = [
     "/docs/security/threat-model.md",
     "/docs/security/incident-response.md",
     "/docs/privacy/data-lifecycle.md",
+    "/docs/release/v0.6.0-rc.1.md",
     "/.agents/plugins/marketplace.json",
     "/.claude-plugin/marketplace.json",
     "/build.rs",

@@ -258,3 +258,9 @@ Next: write and browser-host the Stage 1 native plugin lifecycle plan, starting 
 - **Fresh broad verification:** the full single-threaded suite passed `424 + 9 + 5 + 5 + 5 + 11 + 2 + 1 + 1 + 24 doctests = 487`, zero failed, in 183.9 seconds after the dependency and clippy changes.
 - **Not run:** GitHub-hosted workflow jobs remain unrun because nothing has been pushed.
 - **Next:** commit the executable quality/supply-chain gates, then align every local surface on the approval-ready `0.6.0-rc.1` identity without creating a tag.
+- **Task 5 RED:** candidate-required provenance rejected the aligned `0.5.14` surfaces with `FAIL: candidate version must be 0.6.0-rc.1`; the tag state was already correctly `not created; approval required`.
+- **Task 5 GREEN:** Cargo/Cargo.lock, both native plugin manifests, MCP host assertions, native host assertions, package/agent fixtures, README/INSTALL/CHANGELOG, release notes, and CI provenance now use the local `0.6.0-rc.1` candidate identity. Published crate `0.5.14` and GitHub release `v0.5.13` remain separately and truthfully documented.
+- **Binary identity proof:** after rebuilding, provenance reported PASS with Cargo, binary, Claude plugin, Codex plugin, and MCP server all `0.6.0-rc.1`; eight artifacts were SHA-256 hashed; tag state remained `not created; approval required`.
+- **Focused candidate verification:** agent plugin `5 / 5`, MCP `5 / 5`, package/provenance `11 / 11`, Claude strict marketplace validation PASS, and isolated Rust 1.78 locked all-target check PASS.
+- **Not done by design:** no tag, push, GitHub release, crates.io publish, marketplace submission, real-profile install, or real-data deletion.
+- **Next:** commit the candidate identity, rerun provenance against that exact commit, then execute the complete fresh final gate and compare local history with fetched GitHub state.

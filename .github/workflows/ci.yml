@@ -136,7 +136,7 @@ jobs:
         shell: pwsh
         run: |
           $bin = if ($IsWindows) { ".\target\debug\munin.exe" } else { "./target/debug/munin" }
-          ./scripts/munin-provenance-check.ps1 -MuninBin $bin -RepoRoot .
+          ./scripts/munin-provenance-check.ps1 -MuninBin $bin -RepoRoot . -RequireCandidate
 
   windows-gnu:
     name: Rust checks (windows-gnu)

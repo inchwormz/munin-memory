@@ -12,8 +12,9 @@ tasks without sending that memory to a hosted service.
 
 Published crate: `0.5.14`.
 Latest GitHub release: `v0.5.13`.
-The next release candidate is unreleased. Crate publishing is disabled in this
-checkout until that release is explicitly approved.
+Local release candidate: `0.6.0-rc.1` (not tagged, pushed, published, or
+released). Crate publishing is disabled in this checkout until that release is
+explicitly approved.
 
 [![CI](https://github.com/inchwormz/munin-memory/actions/workflows/ci.yml/badge.svg)](https://github.com/inchwormz/munin-memory/actions/workflows/ci.yml)
 [![Crates.io](https://img.shields.io/crates/v/munin-memory.svg)](https://crates.io/crates/munin-memory)

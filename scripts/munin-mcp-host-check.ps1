@@ -148,7 +148,7 @@ function Invoke-CodexMcpProbe {
         if (@(Compare-Object $expected $toolNames).Count -ne 0) {
             throw "Codex MCP tool surface differs from the six-tool contract. Actual: $($toolNames -join ', ')"
         }
-        if ($server[0].serverInfo.version -ne "0.5.14") {
+        if ($server[0].serverInfo.version -ne "0.6.0-rc.1") {
             throw "Codex MCP server version mismatch: $($server[0].serverInfo.version)"
         }
 

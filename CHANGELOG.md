@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Every local package, native plugin, and MCP identity now agrees on the
+  approval-ready `0.6.0-rc.1` candidate; no tag or release has been created.
 - Crate publishing is disabled in repository metadata until a release is
   explicitly approved.
 - Public documentation now distinguishes the published `0.5.14` crate from the
