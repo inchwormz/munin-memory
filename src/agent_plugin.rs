@@ -31,6 +31,14 @@ const BUNDLE_FILES: &[(&str, &str)] = &[
         include_str!("../plugins/munin-memory/.claude-plugin/plugin.json"),
     ),
     (
+        "plugins/munin-memory/.mcp.json",
+        include_str!("../plugins/munin-memory/.mcp.json"),
+    ),
+    (
+        "plugins/munin-memory/.codex-mcp.json",
+        include_str!("../plugins/munin-memory/.codex-mcp.json"),
+    ),
+    (
         "plugins/munin-memory/hooks.json",
         include_str!("../plugins/munin-memory/hooks.json"),
     ),
@@ -91,6 +99,10 @@ pub fn validate_embedded_bundle() -> Result<usize> {
     let claude_plugin: Value = serde_json::from_str(include_str!(
         "../plugins/munin-memory/.claude-plugin/plugin.json"
     ))?;
+    let claude_mcp: Value =
+        serde_json::from_str(include_str!("../plugins/munin-memory/.mcp.json"))?;
+    let codex_mcp: Value =
+        serde_json::from_str(include_str!("../plugins/munin-memory/.codex-mcp.json"))?;
     for marketplace in [&codex_marketplace, &claude_marketplace] {
         if marketplace.get("name").and_then(Value::as_str) != Some(MARKETPLACE_NAME) {
             bail!("embedded marketplace name does not match {MARKETPLACE_NAME}");
@@ -101,6 +113,17 @@ pub fn validate_embedded_bundle() -> Result<usize> {
             || plugin.get("version").and_then(Value::as_str) != Some(env!("CARGO_PKG_VERSION"))
         {
             bail!("embedded plugin identity/version does not match Cargo metadata");
+        }
+    }
+    if codex_plugin.get("mcpServers").and_then(Value::as_str) != Some("./.codex-mcp.json") {
+        bail!("embedded Codex plugin must point at its MCP declaration");
+    }
+    for command in [
+        claude_mcp.pointer("/munin-memory/command"),
+        codex_mcp.pointer("/mcpServers/munin-memory/command"),
+    ] {
+        if command.and_then(Value::as_str) != Some("munin") {
+            bail!("embedded MCP declarations must launch the installed munin binary");
         }
     }
     for hooks in [

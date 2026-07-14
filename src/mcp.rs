@@ -64,7 +64,9 @@ fn handle_message(message: &Value) -> Option<Value> {
         "initialize" => Some(success_response(id, initialize_result(message))),
         "ping" => Some(success_response(id, json!({}))),
         "tools/list" => Some(success_response(id, json!({"tools": tool_definitions()}))),
-        "tools/call" => Some(tool_call_placeholder(id, message)),
+        "tools/call" => Some(tool_call(id, message)),
+        "resources/list" => Some(success_response(id, json!({"resources": []}))),
+        "resources/templates/list" => Some(success_response(id, json!({"resourceTemplates": []}))),
         _ => Some(error_response(
             id,
             -32601,
@@ -94,7 +96,7 @@ fn initialize_result(message: &Value) -> Value {
     })
 }
 
-fn tool_call_placeholder(id: Value, message: &Value) -> Value {
+fn tool_call(id: Value, message: &Value) -> Value {
     let Some(name) = message.pointer("/params/name").and_then(Value::as_str) else {
         return error_response(id, -32602, "Invalid params", None);
     };

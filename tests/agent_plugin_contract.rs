@@ -56,6 +56,24 @@ fn repository_marketplace_is_dual_host() {
         assert_eq!(manifest["license"], "Apache-2.0");
         assert_eq!(manifest["skills"], "./skills/");
     }
+    assert!(
+        claude_plugin.get("hooks").is_none(),
+        "Claude auto-loads hooks/hooks.json; declaring it in the manifest loads it twice"
+    );
+    let codex_mcp = read_json(&plugin_root.join(".codex-mcp.json"));
+    let claude_mcp = read_json(&plugin_root.join(".mcp.json"));
+    assert_eq!(codex_plugin["mcpServers"], "./.codex-mcp.json");
+    assert_eq!(
+        codex_plugin["openaiCapabilities"]["mcpServers"]["munin-memory"],
+        serde_json::json!({})
+    );
+    for command in [
+        &codex_mcp["mcpServers"]["munin-memory"],
+        &claude_mcp["munin-memory"],
+    ] {
+        assert_eq!(command["command"], "munin");
+        assert_eq!(command["args"], serde_json::json!(["mcp", "serve"]));
+    }
 
     let actual_skills = fs::read_dir(plugin_root.join("skills"))
         .expect("plugin skills directory")

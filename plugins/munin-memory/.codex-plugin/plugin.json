@@ -15,6 +15,12 @@
     "local-first"
   ],
   "skills": "./skills/",
+  "mcpServers": "./.codex-mcp.json",
+  "openaiCapabilities": {
+    "mcpServers": {
+      "munin-memory": {}
+    }
+  },
   "interface": {
     "displayName": "Munin Memory",
     "shortDescription": "Local memory, recall, friction, and proof for Codex",

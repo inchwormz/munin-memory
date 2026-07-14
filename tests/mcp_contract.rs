@@ -176,6 +176,25 @@ fn malformed_json_is_a_protocol_error_not_silence_or_console_text() {
 }
 
 #[test]
+fn unsupported_resource_discovery_is_an_empty_surface_not_a_host_warning() {
+    let _guard = ENV_LOCK.lock().expect("environment lock");
+    let output = run_mcp(
+        &[
+            initialize_request(),
+            json!({"jsonrpc": "2.0", "method": "notifications/initialized"}),
+            json!({"jsonrpc": "2.0", "id": 2, "method": "resources/list", "params": {}}),
+            json!({"jsonrpc": "2.0", "id": 3, "method": "resources/templates/list", "params": {}}),
+        ],
+        None,
+    );
+    assert!(output.status.success());
+    let messages = parse_protocol_lines(&output);
+    assert_eq!(messages.len(), 3);
+    assert_eq!(messages[1]["result"], json!({"resources": []}));
+    assert_eq!(messages[2]["result"], json!({"resourceTemplates": []}));
+}
+
+#[test]
 fn all_six_tools_return_typed_bounded_read_only_results() {
     let _guard = ENV_LOCK.lock().expect("environment lock");
     let profile = tempfile::tempdir().expect("profile");

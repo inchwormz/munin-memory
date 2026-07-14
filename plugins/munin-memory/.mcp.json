@@ -1,0 +1,6 @@
+{
+  "munin-memory": {
+    "command": "munin",
+    "args": ["mcp", "serve"]
+  }
+}
