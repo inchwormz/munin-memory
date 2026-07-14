@@ -242,3 +242,8 @@ Next: write and browser-host the Stage 1 native plugin lifecycle plan, starting 
 - **Retention proof:** report-only retention made no mutation; apply saved `history_days = 30`; the automatic cleanup unit test independently proved a 31-day row is removed while a 29-day row remains under that configured policy.
 - **Verification:** both privacy process tests passed, including the dangerous-root falsifier; the focused configured-cleanup test passed; the source and test contract are in the package include list.
 - **Next:** commit the privacy lifecycle, then publish and test the security, privacy, and incident-response contract.
+- **Task 3 RED:** the package contract failed on the absent `SECURITY.md`; the same contract requires packaged threat, incident, and lifecycle documents plus their load-bearing public claims.
+- **Task 3 GREEN:** added a private disclosure policy, local asset/actor/trust-boundary threat model, severity-through-recovery incident runbook, and command-mapped data lifecycle. README, INSTALL, and CHANGELOG now expose the lifecycle without claiming exports are encrypted or host transcripts are owned.
+- **Corrected claim:** the default Windows database is `%LOCALAPPDATA%\munin\history.db`, not the stale legacy `%LOCALAPPDATA%\context\history.db`; public docs and tracking API comments now agree.
+- **Verification:** all nine package-contract tests passed, including explicit packaging of the four trust documents and assertions for disclosure, plugin/MCP risk, retention/export/forget, backup sensitivity, incident stages, and no outbound telemetry.
+- **Next:** commit the trust contract, then capture current clippy, locked-MSRV, advisory, migration, package, and provenance gate outputs before changing CI.

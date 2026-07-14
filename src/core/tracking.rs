@@ -266,9 +266,9 @@ fn context_event_has_reused_state(stats: &ContextEventStats) -> bool {
 ///
 /// # Database Location
 ///
-/// - Linux: `~/.local/share/context/history.db`
-/// - macOS: `~/Library/Application Support/context/history.db`
-/// - Windows: `%LOCALAPPDATA%\context\history.db`
+/// - Linux: `~/.local/share/munin/history.db`
+/// - macOS: `~/Library/Application Support/munin/history.db`
+/// - Windows: `%LOCALAPPDATA%\munin\history.db`
 ///
 /// # Examples
 ///

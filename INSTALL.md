@@ -76,6 +76,22 @@ pwsh -NoProfile -File .\scripts\munin-mcp-host-check.ps1 -MuninBin <fresh-munin-
 The MCP host check proves its own judge first with a broken runtime, then
 requires Claude to connect and Codex to list all six tools and call `health`.
 
+## Inspect Or Remove Local Data
+
+The default Windows database is `%LOCALAPPDATA%\munin\history.db`. Resolve the
+actual data/config/database paths before backup or deletion:
+
+```powershell
+munin privacy inspect --format json
+munin privacy export --output C:\secure\munin-export --format json
+munin privacy retention --days 30 --format json
+```
+
+Retention is preview-only unless `--apply` is supplied. Project or full deletion
+requires `--confirm FORGET-MUNIN`; source Claude/Codex transcripts and exports
+outside Munin-owned roots are never deletion targets. Exports are not encrypted.
+Read `docs/privacy/data-lifecycle.md` before moving or deleting private state.
+
 End users should treat `munin` as the only supported runtime-context CLI.
 Context may still exist as an internal local developer tool during migration,
 but it is not part of the supported Munin install path.

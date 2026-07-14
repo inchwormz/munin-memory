@@ -24,6 +24,11 @@
   tools and the versioned `munin.mcp.result.v1` response envelope.
 - Native Claude and Codex MCP declarations plus an isolated host gate that
   proves a broken runtime is rejected before accepting the connected surface.
+- An executable privacy lifecycle for owned-root inspection, consistent SQLite
+  export, configurable compiled-row retention, exact-project deletion, and full
+  owned-state deletion with fail-closed confirmation and root checks.
+- A security policy, threat model, incident-response runbook, and exact local
+  data-lifecycle contract.
 
 ### Fixed
 
@@ -35,6 +40,8 @@
 - Claude no longer loads its standard plugin hook file twice.
 - MCP resource discovery returns explicit empty surfaces, avoiding host startup
   warnings when Munin exposes tools but no resources.
+- Automatic history cleanup now respects configured `tracking.history_days`
+  instead of always using 90 days.
 
 ## 0.5.13 - 2026-05-10
 

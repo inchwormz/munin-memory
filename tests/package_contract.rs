@@ -105,6 +105,74 @@ fn privacy_lifecycle_implementation_and_contract_are_packaged() {
 }
 
 #[test]
+fn public_trust_contract_is_complete_and_packaged() {
+    let manifest = std::fs::read_to_string("Cargo.toml").expect("Cargo.toml");
+    let required = [
+        ("SECURITY.md", "/SECURITY.md"),
+        (
+            "docs/security/threat-model.md",
+            "/docs/security/threat-model.md",
+        ),
+        (
+            "docs/security/incident-response.md",
+            "/docs/security/incident-response.md",
+        ),
+        (
+            "docs/privacy/data-lifecycle.md",
+            "/docs/privacy/data-lifecycle.md",
+        ),
+    ];
+    for (file, package_path) in required {
+        assert!(std::path::Path::new(file).exists(), "missing {file}");
+        assert!(
+            manifest.contains(package_path),
+            "Cargo.toml include list must package {package_path}"
+        );
+    }
+
+    let security = std::fs::read_to_string("SECURITY.md").expect("SECURITY.md");
+    assert!(security.contains("Report a vulnerability"));
+    assert!(security.contains("Do not include real transcripts or secrets"));
+
+    let threat = std::fs::read_to_string("docs/security/threat-model.md").expect("threat model");
+    for phrase in [
+        "Assets",
+        "Actors",
+        "Trust boundaries",
+        "Plugin and MCP risks",
+    ] {
+        assert!(threat.contains(phrase), "threat model missing {phrase}");
+    }
+
+    let incident =
+        std::fs::read_to_string("docs/security/incident-response.md").expect("incident response");
+    for phrase in ["Severity", "Containment", "Eradication", "Recovery"] {
+        assert!(
+            incident.contains(phrase),
+            "incident response missing {phrase}"
+        );
+    }
+
+    let lifecycle =
+        std::fs::read_to_string("docs/privacy/data-lifecycle.md").expect("data lifecycle");
+    for phrase in [
+        "90 days",
+        "munin privacy inspect",
+        "munin privacy export",
+        "munin privacy retention",
+        "munin privacy forget",
+        "FORGET-MUNIN",
+        "not encrypted",
+        "does not send telemetry",
+    ] {
+        assert!(
+            lifecycle.contains(phrase),
+            "data lifecycle missing {phrase}"
+        );
+    }
+}
+
+#[test]
 fn release_check_fails_closed_on_warnings() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let fake_munin = temp_dir.path().join("fake-munin.ps1");

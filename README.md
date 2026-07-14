@@ -302,8 +302,29 @@ Munin reads local agent history and writes a local SQLite-backed Memory OS under
 the platform local data directory. On Windows this is normally:
 
 ```text
-%LOCALAPPDATA%\context\history.db
+%LOCALAPPDATA%\munin\history.db
 ```
+
+Inspect exact owned roots and sensitivity warnings, create a hash-manifested
+local export, preview/apply compiled-row retention, or explicitly delete one
+project/all Munin-owned state:
+
+```powershell
+munin privacy inspect --format text
+munin privacy export --output C:\secure\munin-export --format json
+munin privacy retention --days 30 --format json
+munin privacy retention --days 30 --apply --format json
+munin privacy forget --project "C:\exact\project" --confirm FORGET-MUNIN --format json
+munin privacy forget --all --confirm FORGET-MUNIN --format json
+```
+
+Retention defaults to 90 days and never removes host-owned source transcripts.
+Exports are not encrypted by Munin. Full forget removes only resolved
+Munin-owned roots; plugin uninstall, external exports/backups, and Claude/Codex
+source retention are separate operator actions. Munin sends no hosted usage
+telemetry. See [Data Lifecycle](docs/privacy/data-lifecycle.md),
+[Threat Model](docs/security/threat-model.md), [Incident Response](docs/security/incident-response.md),
+and [Security Policy](SECURITY.md).
 
 For testing or demos, you can isolate paths:
 
@@ -335,6 +356,7 @@ Repository layout:
 - `src/agent_plugin.rs` - native marketplace lifecycle, rollback, and migration
 - `src/agent_hook.rs` - bounded freshness hook and detached refresh worker
 - `src/mcp.rs` and `src/mcp_tools.rs` - MCP protocol boundary and typed adapters
+- `src/privacy.rs` - inspect, export, retention, and exact-scope deletion
 - `plugins/munin-memory/` - shared Codex/Claude plugin payload
 - `src/analytics/` - Memory OS read surfaces and session ingestion
 - `src/core/` - durable tracking, Memory OS, strategy, proactivity, and resolver
