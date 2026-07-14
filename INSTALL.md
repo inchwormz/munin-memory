@@ -28,6 +28,47 @@ munin hygiene --format text
 munin install --check-resolvable
 ```
 
+## Install For Codex And Claude
+
+Munin ships one embedded marketplace with plugin identity
+`munin-memory@munin-memory`.
+
+```powershell
+# Both hosts
+munin plugin install
+munin plugin verify
+
+# Or one host
+munin plugin install --codex
+munin plugin install --claude
+```
+
+The install is local/offline after the binary is present. Munin materializes
+the exact tracked bundle under `~/.munin/plugin-marketplaces/0.5.14/`; Codex and
+Claude then own their normal plugin caches. Lifecycle receipts are written
+under `~/.munin/`.
+
+To remove the native plugin and marketplace:
+
+```powershell
+munin plugin uninstall
+```
+
+Legacy direct Munin skills, commands, and global hook entries are migrated only
+when they can be positively identified. Files are moved, not deleted, into a
+timestamped `~/.munin/migration-backups/` directory. Unknown Munin-named files
+remain in place and are reported as conflicts.
+
+The current local compatibility proof uses Codex CLI `0.144.3` and Claude Code
+`2.1.207`. Typed MCP memory tools are planned for the next phase; this phase
+ships the nine memory skills and bounded session-start refresh hook.
+
+For a clean-profile real-host proof:
+
+```powershell
+pwsh -NoProfile -File .\scripts\munin-agent-plugin-check.ps1 -MuninBin <fresh-munin-binary>
+```
+
 End users should treat `munin` as the only supported runtime-context CLI.
 Context may still exist as an internal local developer tool during migration,
 but it is not part of the supported Munin install path.

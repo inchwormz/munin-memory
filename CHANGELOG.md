@@ -8,6 +8,18 @@
   explicitly approved.
 - Public documentation now distinguishes the published `0.5.14` crate from the
   latest GitHub release, `v0.5.13`.
+- Codex and Claude installation now uses one tracked dual-host marketplace and
+  each host's native plugin manager instead of direct profile writes.
+- Legacy direct Munin integration is moved into timestamped, reversible backups;
+  unknown files are reported as conflicts and left untouched.
+
+### Added
+
+- `munin plugin install`, `verify`, and `uninstall` with JSON lifecycle receipts,
+  hash-checked local materialization, idempotence, and bounded rollback.
+- A nonblocking session-start freshness hook with a detached incremental worker,
+  lease recovery, and explicit failure status.
+- An isolated real-host release gate for Codex and Claude native plugin state.
 
 ### Fixed
 

@@ -5,8 +5,8 @@ Local memory for Claude Code and Codex.
 Munin ingests Claude and Codex sessions and compiles them into local Memory OS
 surfaces for live continuity, strategy, and recall.
 
-It exposes that memory back to your agent through CLI commands, Claude slash
-commands, and Codex skills. It is designed for developers who want agents to
+It exposes that memory back to your agent through CLI commands and one native
+Claude/Codex plugin. It is designed for developers who want agents to
 remember active work, repeated mistakes, strategic priorities, and unfinished
 tasks without sending that memory to a hosted service.
 
@@ -54,10 +54,9 @@ provider or an explicit `--provider claude|codex` override. It infers what tasks
 should be executed based on goal/project deltas. Where you are now,
 where you want to be, what closes the delta? It will enable Claude/Codex to be proactive to help
 you reach your goals.
-5. **Agent access** installs Claude skills, Claude slash commands, Codex skills,
-and a Codex plugin skill bundle so agents can query compiled memory instead of
-trawling raw transcripts.
-6. **Session Brain** compiles the current live session into a short working
+4. **Agent access** installs one native plugin through each host's own plugin
+manager so agents can query compiled memory instead of trawling raw transcripts.
+5. **Session Brain** compiles the current live session into a short working
 memory layer: who the user is, what they care about, the current ask, active
 strategy, blockers, and next actions. It is for long context windows where the
 agent needs current-session oversight, not historical search.
@@ -67,9 +66,9 @@ Munin.
 
 ## Install For A New User
 
-Today, Munin distribution is binary-first. A Claude/Codex plugin marketplace package is
-not live yet. Install the `munin` binary first, then ask Munin to install the
-agent-facing skills and commands.
+Munin distribution is binary-first. Install the `munin` binary, then let Munin
+materialize its embedded marketplace and delegate installation to the native
+Codex and Claude plugin managers. No hosted marketplace is required.
 
 ### Option A: Install From crates.io
 
@@ -92,64 +91,52 @@ munin --version
 munin install --check-resolvable
 ```
 
-## Install Agent Skills
+## Install The Native Agent Plugin
 
-After the binary works, install the surfaces for the agent you use. The
-supported runtime path is Munin-only.
+The plugin identity is `munin-memory@munin-memory`. Install it for one host or
+both:
 
 ### Claude Code
 
 ```powershell
-munin install --claude --force
-```
-
-This writes:
-
-- `~/.claude/skills/munin*/SKILL.md`
-- `~/.claude/commands/munin*.md`
-
-Restart Claude Code, then use slash commands:
-
-```text
-/munin-memory-os-ingest
-/munin-doctor
-/munin
-/munin-nudge
-/munin-proactive
-/munin-recall topic <query>
-/munin-strategy
+munin plugin install --claude --format text
+munin plugin verify --claude --format text
 ```
 
 ### Codex
 
 ```powershell
-munin install --codex --force
-```
-
-This writes:
-
-- `~/.codex/skills/munin*/SKILL.md`
-- `~/.codex/plugins/munin-memory/...`
-
-Restart Codex, then use skills:
-
-```text
-$munin-memory-os-ingest
-$munin-doctor
-$munin
-$munin-nudge
-$munin-proactive
-$munin-recall
-$munin-strategy
+munin plugin install --codex --format text
+munin plugin verify --codex --format text
 ```
 
 ### Both Agents
 
 ```powershell
-munin install --force
+munin plugin install --format text
+munin plugin verify --format text
 ```
 
-By default this installs both Claude and Codex surfaces.
+The compatibility commands `munin install --claude`, `--codex`, or no host flag
+forward to the same native lifecycle. The old `--force` and `--keep-legacy`
+flags no longer control host caches.
+
+Munin owns only:
+
+- the versioned local marketplace under
+  `~/.munin/plugin-marketplaces/<version>/`;
+- schema-versioned lifecycle receipts under `~/.munin/`;
+- timestamped migration backups under `~/.munin/migration-backups/`.
+
+Codex and Claude own their plugin caches. A first native install moves only
+positively identified legacy Munin files into the migration backup and removes
+only positively identified Munin hook entries. Unknown files are left in place
+and reported as conflicts.
+
+The plugin supplies nine skills: `munin`, `munin-brain`, `munin-doctor`,
+`munin-friction`, `munin-hygiene`, `munin-nudge`, `munin-prove`,
+`munin-recall`, and `munin-resume`. Its session-start hook returns a freshness
+receipt immediately and queues incremental ingestion in a detached worker.
 
 ## First Run
 
@@ -159,21 +146,9 @@ Run ingestion once after installing agent surfaces:
 munin memory-os ingest --format text
 ```
 
-From Claude:
-
-```text
-/munin-memory-os-ingest
-```
-
-From Codex:
-
-```text
-$munin-memory-os-ingest
-```
-
-The installed ingestion skill uses `--force` so demos and repeated test runs
-show timing and corpus counts every time. Direct CLI ingestion without
-`--force` is incremental and will say `current` when nothing new needs import.
+Direct CLI ingestion without `--force` is incremental and says `current` when
+nothing new needs import. The native plugin hook also queues this incremental
+check when compiled memory is stale.
 
 Typical output:
 
@@ -181,7 +156,7 @@ Typical output:
 Memory OS Ingest
 ----------------
 Elapsed: 46.70s
-Mode: forced replay
+Mode: incremental
 Status: imported
 Sessions processed: 2910
 Shell executions ingested: 35065
@@ -194,12 +169,7 @@ Then check health:
 munin doctor --scope user --format text
 ```
 
-or from Claude/Codex:
-
-```text
-/munin-doctor
-$munin-doctor
-```
+From Claude or Codex, ask the agent to use the installed `munin-doctor` skill.
 
 ## Daily Usage
 
@@ -215,24 +185,14 @@ munin memory-os overview --scope user --format text
 munin memory-os friction --scope user --format text
 ```
 
-The agent-facing equivalents are:
+The native plugin exposes these matching skill names:
 
 ```text
-/munin
-/munin-brain
-/munin-nudge
-/munin-recall topic <query>
-/munin-friction
-```
-
-and in Codex:
-
-```text
-$munin
-$munin-brain
-$munin-nudge
-$munin-recall
-$munin-friction
+munin
+munin-brain
+munin-nudge
+munin-recall
+munin-friction
 ```
 
 ## What `munin nudge` Does
@@ -261,14 +221,7 @@ Execution:
 
 ## Strategy Planning
 
-Munin also ships a strategy skill:
-
-```text
-/munin-strategy
-$munin-strategy
-```
-
-Use it to create or update a One-Page Strategic Plan, bootstrap a strategy
+Use the CLI to create or update a One-Page Strategic Plan, bootstrap a strategy
 kernel, or triage tasks against goals. After strategy setup, `munin nudge` uses
 the strategy kernel and metrics snapshot to recommend the next task.
 
@@ -286,29 +239,23 @@ munin metrics set <metric_key> <value> --scope <scope>
 These commands are useful when testing a new install:
 
 ```powershell
-munin install --dry-run
 munin install --check-resolvable
-munin install --claude --dry-run
-munin install --claude --force
-munin install --codex --dry-run
-munin install --codex --force
+munin plugin install --dry-run --format json
+munin plugin install --format json
+munin plugin verify --format json
+munin hook session-start --format json
+munin plugin uninstall --format json
 ```
 
-Installed quick surfaces:
+For an isolated proof against the installed Codex and Claude CLIs:
 
-```text
-/munin-install-check
-/munin-install-claude-preview
-/munin-install-claude
-/munin-install-codex
-/munin-memory-os-ingest
-/munin-proactive
+```powershell
+pwsh -NoProfile -File .\scripts\munin-agent-plugin-check.ps1 -MuninBin <fresh-munin-binary>
 ```
 
-Codex equivalents use `$...`.
-
-`munin install` archives old Munin skill folders into `.munin-legacy` by default.
-Use `--keep-legacy` to leave them in place.
+The gate proves install, native list/details, Munin verify, forced partial
+rollback, bounded refresh, uninstall, and semantic equality between native
+pre-state and post-state.
 
 ## Non-Technical Release Check
 
@@ -345,18 +292,23 @@ $env:MUNIN_DATA_DIR = "C:\tmp\munin-data"
 The current supported install path is:
 
 1. Install the binary from crates.io or GitHub source.
-2. Run `munin install --claude --force`, `munin install --codex --force`, or
-   `munin install --force`.
-3. Restart the agent and use the installed skills/slash commands.
+2. Run `munin plugin install --claude`, `--codex`, or no host flag for both.
+3. Run `munin plugin verify`.
+4. Restart the agent and use the installed Munin skills.
 
-A GitHub-backed Claude plugin marketplace package is planned but not live in
-this testing build.
+The repository and binary both contain the same dual-host marketplace. The
+local gate currently pins Codex CLI `0.144.3` and Claude Code `2.1.207`.
+Typed MCP tools are intentionally deferred to the next implementation phase;
+the current plugin exposes skills and the bounded freshness hook.
 
 ## Development
 
 Repository layout:
 
-- `src/bin/munin.rs` - CLI entrypoint and skill/command installer
+- `src/bin/munin.rs` - CLI entrypoint
+- `src/agent_plugin.rs` - native marketplace lifecycle, rollback, and migration
+- `src/agent_hook.rs` - bounded freshness hook and detached refresh worker
+- `plugins/munin-memory/` - shared Codex/Claude plugin payload
 - `src/analytics/` - Memory OS read surfaces and session ingestion
 - `src/core/` - durable tracking, Memory OS, strategy, proactivity, and resolver
 - `src/session_brain/` - current-session summary

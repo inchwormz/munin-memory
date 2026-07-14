@@ -52,6 +52,20 @@ fn release_check_script_is_packaged_with_readme() {
 }
 
 #[test]
+fn agent_plugin_check_script_is_packaged() {
+    let manifest = std::fs::read_to_string("Cargo.toml").expect("Cargo.toml");
+    let script_path = "/scripts/munin-agent-plugin-check.ps1";
+    assert!(
+        manifest.contains(script_path),
+        "Cargo.toml include list must package {script_path}"
+    );
+    assert!(
+        std::path::Path::new("scripts/munin-agent-plugin-check.ps1").exists(),
+        "native plugin release gate must exist"
+    );
+}
+
+#[test]
 fn release_check_fails_closed_on_warnings() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let fake_munin = temp_dir.path().join("fake-munin.ps1");

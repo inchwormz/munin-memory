@@ -26,6 +26,7 @@ include = [
     "/build.rs",
     "/plugins/munin-memory/**",
     "/scripts/munin-release-check.ps1",
+    "/scripts/munin-agent-plugin-check.ps1",
     "/src/lib.rs",
     "/src/agent_hook.rs",
     "/src/agent_plugin.rs",

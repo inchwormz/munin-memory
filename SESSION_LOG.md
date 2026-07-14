@@ -13,7 +13,7 @@ Turn Munin from a file-copying CLI integration into a first-class local memory t
 
 ## Progress measure
 
-**First-class gates proven: 3 / 10**
+**First-class gates proven: 7 / 10**
 
 1. Windows GNU build and tests pass.
 2. Doctor process exit matches its report status.
@@ -170,4 +170,12 @@ Next: write and browser-host the Stage 1 native plugin lifecycle plan, starting 
 - **Shipped-hook proof:** Node syntax check, Claude strict validation, and repository assertions prove there is no `spawnSync`, 120-second timeout, or direct ingestion command in the plugin hook assets.
 - **Cleanup:** removed 1,098 lines of unreachable direct installer/global-hook code and replaced the old generated-asset check with validation of the embedded native marketplace. `cargo check` is warning-free.
 - **Verification:** all five `agent_plugin_contract` tests plus the generated-skill resolver contract passed on `x86_64-pc-windows-gnu`.
-- **Next:** commit Task 4, then build the isolated real-host lifecycle gate and public install documentation.
+- **Task 5 RED:** the package contract failed because the real-host gate script was missing from both the repository and Cargo package include list.
+- **Task 5 GREEN:** `scripts/munin-agent-plugin-check.ps1` creates isolated native profiles, proves install/list/details/verify, forces a partial failure, measures the hook, proves the worker, uninstalls, and compares native post-state to pre-state.
+- **Real-host receipt:** Codex CLI `0.144.3` and Claude Code `2.1.207` both listed `munin-memory@munin-memory` version `0.5.14` enabled. Forced rollback exited `1`; the final session-start receipt returned in `125 ms`; worker status was `pass`; uninstall restored all four native list/marketplace surfaces to their pre-state.
+- **Receipt root:** `C:\Users\johnr\AppData\Local\Munin\checks\munin-agent-plugin-check-20260714-122659-034-15312`.
+- **Fresh Stage 1 suite:** clean target `C:\Users\johnr\Documents\Codex\2026-07-14\goa\work\munin-phase1-final-20260714`; `420 + 9 + 5 + 4 + 6 + 1 + 1 + 24 doctests = 470` passed, `0` failed, in `226` seconds. Production `cargo check` is warning-free; one pre-existing test-only dead-code warning remains in `core/artifacts.rs`.
+- **Artifact gate:** `install --check-resolvable` passed `136` checks; `cargo package --locked --allow-dirty` assembled and verified `169` files, `2.1 MiB` uncompressed and `393.1 KiB` compressed; Claude strict validation passed.
+- **Gate accounting:** gates 5–8 are now fully proven. Gate 4 remains deliberately uncounted until an approved `0.6` version/tag/artifact identity exists. Gates 9–10 are Stage 2 typed MCP and Stage 3 trust/scale work.
+- **Not run:** GitHub-hosted CI was not run because nothing was pushed. No real user profile was changed. No tag, release, registry publish, marketplace submission, or deployment was performed.
+- **Next:** commit Task 5, then write the Stage 2 typed MCP protocol plan from the six-tool contract in this ledger.
