@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Munin Typed MCP — Phase 2</title>
+  <style>
+    :root{color-scheme:dark;--bg:#071018;--panel:#0d1b26;--ink:#ecf6ff;--muted:#9eb4c4;--blue:#50b7ff;--green:#5be0a3;--amber:#ffc15a;--line:#244153}
+    *{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top,#123149 0,#071018 52%);color:var(--ink);font:16px/1.55 system-ui,sans-serif}
+    main{max-width:1120px;margin:auto;padding:48px 24px 80px}h1{font-size:clamp(2.3rem,6vw,4.9rem);line-height:.95;margin:0 0 18px;letter-spacing:-.05em}h2{margin-top:50px;font-size:1.65rem}h3{color:var(--blue);margin-bottom:6px}.lede{max-width:820px;color:var(--muted);font-size:1.2rem}.score{display:inline-flex;gap:12px;align-items:center;border:1px solid var(--line);background:#0a1721;padding:10px 16px;border-radius:999px;margin:22px 0}.score b{color:var(--green);font-size:1.2rem}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}.card{border:1px solid var(--line);background:linear-gradient(160deg,#102330,#0a151e);border-radius:16px;padding:20px}.card p,.card li{color:var(--muted)}.flow{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin:26px 0}.node{border:1px solid var(--line);background:#102532;border-radius:12px;padding:14px 18px;font-weight:700}.arrow{color:var(--blue);font-size:1.6rem}.contract{border-left:4px solid var(--green);padding:8px 18px;background:#0b1d23}.warning{border-left-color:var(--amber)}code{color:#a9d9ff}ol{padding-left:22px}.tag{font-size:.75rem;text-transform:uppercase;letter-spacing:.12em;color:var(--green)}footer{margin-top:60px;color:var(--muted);border-top:1px solid var(--line);padding-top:20px}
+  </style>
+</head>
+<body><main>
+  <div class="tag">Execution plan · 14 July 2026</div>
+  <h1>Munin becomes a typed local memory service.</h1>
+  <p class="lede">Six read-only tools, one versioned result contract, and the same black-box corpus proven through Codex and Claude. The MCP layer is a narrow adapter over Munin's existing compiled memory—not a second memory engine.</p>
+  <div class="score"><span>First-class gates</span><b>7 / 10 → 8 / 10</b></div>
+
+  <h2>What ships</h2>
+  <div class="grid">
+    <section class="card"><h3>search</h3><p>Ranked compiled memory matches with evidence and bounded coverage.</p></section>
+    <section class="card"><h3>session_summary</h3><p>Exact session identity, five-bullet handoff, and machine-usability quality.</p></section>
+    <section class="card"><h3>project_state</h3><p>Claims, open loops, checkpoints, and current next actions.</p></section>
+    <section class="card"><h3>friction</h3><p>Active repeated failures and their permanent-fix pointers.</p></section>
+    <section class="card"><h3>strategy_status</h3><p>Goals, KPIs, initiatives, evidence freshness, and instrumentation gaps.</p></section>
+    <section class="card"><h3>health</h3><p>Fast substrate health without hiding refresh work or mutating the corpus.</p></section>
+  </div>
+
+  <h2>One path, two hosts</h2>
+  <div class="flow" aria-label="Architecture flow">
+    <div class="node">Codex plugin</div><div class="node">Claude plugin</div><div class="arrow">→</div>
+    <div class="node">munin mcp serve</div><div class="arrow">→</div>
+    <div class="node">Typed read models</div><div class="arrow">→</div><div class="node">Local SQLite + strategy files</div>
+  </div>
+  <div class="contract"><strong>Pinned boundary:</strong> MCP 2025-11-25, newline-delimited JSON-RPC over stdio, Codex 0.144.3, Claude 2.1.207, Rust 1.78.</div>
+
+  <h2>The non-negotiable receipt</h2>
+  <p>Every result carries five kinds of truth. Missing truth is labeled unknown, never guessed.</p>
+  <div class="grid">
+    <section class="card"><h3>Provenance</h3><p>What compiled source produced the answer and which source reference supports it.</p></section>
+    <section class="card"><h3>Freshness</h3><p>When the source was observed and whether that age is fresh, stale, or unknown.</p></section>
+    <section class="card"><h3>Sensitivity</h3><p>Local-private, secret/PII flags, packetization restriction, or explicit unknown.</p></section>
+    <section class="card"><h3>Warnings</h3><p>Missing instrumentation, degraded sources, quality gaps, and validation failures.</p></section>
+    <section class="card"><h3>Coverage</h3><p>Exact found, returned, dropped, and limit counts—no silent truncation.</p></section>
+  </div>
+
+  <h2>Execution sequence</h2>
+  <ol>
+    <li><strong>Make the protocol test fail.</strong> Prove the command is absent and the harness rejects silence.</li>
+    <li><strong>Add the lifecycle boundary.</strong> Initialize, ping, list, call, deterministic errors, protocol-only stdout.</li>
+    <li><strong>Add six typed adapters.</strong> Seed one corpus, force truncation, prove all shared receipt fields.</li>
+    <li><strong>Break both host declarations on purpose.</strong> A host gate that cannot see a bad executable is false-green.</li>
+    <li><strong>Wire the real declarations.</strong> Install, list tools, call health, uninstall, prove exact profile rollback.</li>
+    <li><strong>Run the fresh phase gate.</strong> Full GNU suite, host checks, resolver, package, strict validation.</li>
+  </ol>
+
+  <div class="contract warning"><strong>Stop rule:</strong> Any corpus mutation, silent host pass, missing provenance, or assumed-safe sensitivity blocks the gate. Release, publish, marketplace submission, real-profile install, and push remain approval boundaries.</div>
+  <footer>The detailed command-by-command plan is in <code>docs/superpowers/plans/2026-07-14-munin-typed-mcp-phase-2.md</code>.</footer>
+</main></body></html>

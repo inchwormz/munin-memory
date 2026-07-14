@@ -179,3 +179,15 @@ Next: write and browser-host the Stage 1 native plugin lifecycle plan, starting 
 - **Gate accounting:** gates 5–8 are now fully proven. Gate 4 remains deliberately uncounted until an approved `0.6` version/tag/artifact identity exists. Gates 9–10 are Stage 2 typed MCP and Stage 3 trust/scale work.
 - **Not run:** GitHub-hosted CI was not run because nothing was pushed. No real user profile was changed. No tag, release, registry publish, marketplace submission, or deployment was performed.
 - **Next:** commit Task 5, then write the Stage 2 typed MCP protocol plan from the six-tool contract in this ledger.
+
+### 2026-07-14 — Phase 2 orientation
+
+- **Verified repo state:** `main` is clean at `d2d0c702e3c0e51365ebf182c4269177658bae24`; `origin/main` remains `7a0fa884da82214c056c7db532b803e413fff05d` because nothing has been pushed.
+- **Verified protocol pin:** MCP `2025-11-25` is the latest stable specification. Its stdio transport is newline-delimited UTF-8 JSON-RPC; stdout is protocol-only and stderr may carry diagnostics.
+- **Verified host pins:** Codex CLI `0.144.3` exposes `codex mcp add/list/get/remove`; Claude Code `2.1.207` exposes the corresponding MCP lifecycle.
+- **Verified plugin shape:** installed OpenAI Codex plugins point `mcpServers` at a plugin-local `.mcp.json`; installed Claude plugins load a plugin-root `.mcp.json` server map.
+- **Decision:** implement the narrow synchronous stdio lifecycle with existing `serde`/`serde_json` instead of adding an async SDK/runtime. This preserves Rust `1.78` and keeps one compiled Munin binary as the only runtime dependency.
+- **Decision:** the six tools are read-only adapters over existing typed read models. They must not run session import refresh, write tracking events, update strategy, or infer missing sensitivity as safe.
+- **Premortem check:** the Stage 2 host gate first installs a broken executable declaration and must observe both hosts fail. A host check that cannot detect the broken server is rejected as false-green.
+- **Plan:** `docs/superpowers/plans/2026-07-14-munin-typed-mcp-phase-2.md` plus the browser plan at the adjacent `.html` path.
+- **Next:** Task 1 RED — run the black-box lifecycle test against the absent `munin mcp serve` command and prove the judge rejects silence.
