@@ -264,3 +264,20 @@ Next: write and browser-host the Stage 1 native plugin lifecycle plan, starting 
 - **Focused candidate verification:** agent plugin `5 / 5`, MCP `5 / 5`, package/provenance `11 / 11`, Claude strict marketplace validation PASS, and isolated Rust 1.78 locked all-target check PASS.
 - **Not done by design:** no tag, push, GitHub release, crates.io publish, marketplace submission, real-profile install, or real-data deletion.
 - **Next:** commit the candidate identity, rerun provenance against that exact commit, then execute the complete fresh final gate and compare local history with fetched GitHub state.
+
+### 2026-07-14 — Final 0.6.0-rc.1 candidate verification and handoff
+
+- **Verified candidate before this handoff:** `a53844d37c87cbc82c5e5133b572ec03e7b4f1a9` on local `main`.
+- **Fresh source gate:** `cargo fmt --check`, `cargo clippy --locked --all-targets -- -D warnings`, and the complete single-threaded GNU suite all passed from clean target `C:\Users\johnr\Documents\Codex\2026-07-14\goa\work\munin-final-a53844d`. The suite total was `487 passed, 0 failed` (`424 + 9 + 5 + 5 + 5 + 11 + 2 + 1 + 1 + 24 doctests`).
+- **Fresh compatibility gate:** the explicit isolated `cargo +1.78.0-x86_64-pc-windows-gnu check --locked --all-targets` passed from a separate target in `1m 27s`. The isolated toolchain remained under the task work directory and did not modify PATH or the global/SiteSorted Rust installation.
+- **Fresh resolver and package gates:** `install --check-resolvable` passed `138` checks. `cargo package --locked` packaged and verified `184` files, `2.2 MiB` uncompressed and `425.3 KiB` compressed. `claude plugin validate --strict .` passed.
+- **Fresh supply-chain gate:** isolated cargo-deny `0.20.2` reported `advisories ok, licenses ok`; there are no advisory suppressions.
+- **Fresh lifecycle gate:** the native Codex/Claude plugin check passed against Codex CLI `0.144.3` and Claude Code `2.1.208`. It verified two hosts, forced rollback exit `1`, measured a `709 ms` session-start receipt, observed the worker pass, uninstalled, and restored isolated pre-state.
+- **Fresh MCP gate:** the native host check first substituted a broken runtime and observed Claude disconnected plus zero Codex tools. With the real runtime, Codex exposed exactly `friction, health, project_state, search, session_summary, strategy_status`; health returned `munin.mcp.result.v1`; Claude reported connected.
+- **Fresh privacy gate:** both privacy process contracts passed. The exact-project/all-owned forget lifecycle preserved source transcripts and the export, and the dangerous-root test refused the current workspace.
+- **Fresh provenance gate:** Cargo, binary, Claude plugin, Codex plugin, and MCP server all reported `0.6.0-rc.1`; eight artifacts were hashed; the tag remained absent and approval-gated.
+- **Real-corpus read-only proof:** `munin doctor --scope user --format json` inspected 75 imported sessions in `622 ms`, returned truthful `warn`/exit `1`, and performed no import, install, export, retention, forget, or deletion.
+- **GitHub divergence after live fetch:** `origin/main` is `7a0fa884da82214c056c7db532b803e413fff05d`; local was `23` commits ahead and `0` behind. GitHub's latest release is still `v0.5.13`; the newest remote tag is `v0.5.13`. The local candidate is not pushed or tagged.
+- **Preserved boundary:** no tag, push, GitHub release, crates.io publish, marketplace submission, real-profile plugin install, or real-data deletion was performed.
+- **Not run:** GitHub-hosted CI is still unrun because the candidate was not pushed. Windows MSVC, Linux, and macOS remain remote-run evidence gaps.
+- **Recommended next step:** review the audit report, then explicitly approve a push of local `main` so GitHub CI can supply cross-platform evidence before any tag or release decision.
