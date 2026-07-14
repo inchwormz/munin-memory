@@ -165,6 +165,8 @@ pub struct UserDecisionRecord {
 }
 
 impl Tracker {
+    // Claim provenance is deliberately explicit at the persistence boundary.
+    #[allow(clippy::too_many_arguments)]
     pub fn create_claim_lease(
         &self,
         claim_type: ClaimLeaseType,
@@ -190,6 +192,9 @@ impl Tracker {
         )
     }
 
+    // Project identity is the one additional field on the explicit persistence
+    // boundary; callers must not synthesize a partially populated options bag.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn create_claim_lease_for_project(
         &self,
         project_path: &str,

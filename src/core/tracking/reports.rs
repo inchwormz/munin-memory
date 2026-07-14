@@ -311,7 +311,7 @@ fn active_user_prose_findings(
     user_prose
         .iter()
         .filter(|finding| finding.title == "Memory OS direction")
-        .cloned()
         .take(1)
+        .cloned()
         .collect()
 }

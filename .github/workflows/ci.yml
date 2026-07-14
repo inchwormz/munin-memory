@@ -6,7 +6,44 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
+  clippy:
+    name: Clippy (warnings denied)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust with Clippy
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Clippy
+        run: cargo clippy --locked --all-targets -- -D warnings
+
+  msrv:
+    name: Rust 1.78 MSRV
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust 1.78
+        uses: dtolnay/rust-toolchain@1.78.0
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check locked graph on the declared MSRV
+        run: cargo check --locked --all-targets
+
   test:
     name: Rust checks (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -42,8 +79,8 @@ jobs:
           $bin = if ($IsWindows) { ".\target\debug\munin.exe" } else { "./target/debug/munin" }
           ./scripts/munin-release-check.ps1 -MuninBin $bin
 
-  licenses:
-    name: License allowlist
+  supply-chain:
+    name: Licenses and RustSec advisories
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -55,7 +92,51 @@ jobs:
       - name: Run cargo-deny
         uses: EmbarkStudios/cargo-deny-action@v2
         with:
-          command: check licenses
+          command: check licenses advisories
+
+  migration:
+    name: Old-schema migration
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Migrate a legacy database without losing its row
+        run: cargo test --locked core::tracking::tests::test_old_commands_schema_migrates_to_current_without_losing_rows -- --exact
+
+  package-provenance:
+    name: Package and provenance
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build binary
+        run: cargo build --locked --bin munin
+
+      - name: Package contract
+        run: cargo test --locked --test package_contract
+
+      - name: Assemble package
+        run: cargo package --locked
+
+      - name: Verify version identity and hashes
+        shell: pwsh
+        run: |
+          $bin = if ($IsWindows) { ".\target\debug\munin.exe" } else { "./target/debug/munin" }
+          ./scripts/munin-provenance-check.ps1 -MuninBin $bin -RepoRoot .
 
   windows-gnu:
     name: Rust checks (windows-gnu)

@@ -260,9 +260,8 @@ fn build_agenda(
         .next_move_candidates
         .iter()
         .filter(|item| item.role == "user")
-        .filter_map(|item| {
-            (Some(item.summary.as_str()) != current_goal.as_deref()).then(|| item.summary.clone())
-        })
+        .filter(|&item| Some(item.summary.as_str()) != current_goal.as_deref())
+        .map(|item| item.summary.clone())
         .take(4)
         .collect::<Vec<_>>();
     if let Some(goal) = current_goal.as_deref() {

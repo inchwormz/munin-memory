@@ -157,7 +157,7 @@ impl Tracker {
                 recommendation: input.reentry.current_recommendation.clone(),
             };
             self.record_memory_os_action_observation(
-                &project_path,
+                project_path,
                 "checkpoint-reentry",
                 Some(&event_id),
                 &cue,

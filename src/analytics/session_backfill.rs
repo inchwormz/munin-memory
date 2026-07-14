@@ -145,8 +145,8 @@ fn ensure_memory_os_session_backfill_internal(
     }
 
     let flags = crate::core::config::memory_os();
-    if !flags.read_model_v1
-        && !(flags.journal_v1 && flags.dual_write_v1 && flags.checkpoint_v1 && flags.action_v1)
+    if !(flags.read_model_v1
+        || flags.journal_v1 && flags.dual_write_v1 && flags.checkpoint_v1 && flags.action_v1)
     {
         return Ok(None);
     }
@@ -850,7 +850,7 @@ fn sentence_for_session_summary(text: &str) -> String {
         .collect::<Vec<_>>()
         .join(" ");
     let sentence = compact
-        .split(|ch: char| matches!(ch, '\n' | '\r'))
+        .split(['\n', '\r'])
         .next()
         .unwrap_or(compact.as_str())
         .trim()
@@ -1057,7 +1057,7 @@ fn semantic_summary(text: &str) -> Option<String> {
     }
     let mut selected = Vec::new();
     for sentence in compact
-        .split(|ch: char| matches!(ch, '.' | '?' | '!'))
+        .split(['.', '?', '!'])
         .map(str::trim)
         .filter(|sentence| sentence.split_whitespace().count() >= 4)
     {

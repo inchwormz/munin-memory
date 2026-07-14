@@ -56,9 +56,7 @@ fn handle_message(message: &Value) -> Option<Value> {
         return id.map(|id| error_response(id, -32600, "Invalid Request", None));
     };
 
-    if id.is_none() {
-        return None;
-    }
+    id.as_ref()?;
     let id = id.unwrap_or(Value::Null);
     match method {
         "initialize" => Some(success_response(id, initialize_result(message))),

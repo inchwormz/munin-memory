@@ -128,7 +128,7 @@ impl SessionFocus {
             || self
                 .suppression_signals
                 .iter()
-                .any(|item| is_live_user_task_signal(item))
+                .any(is_live_user_task_signal)
     }
 }
 

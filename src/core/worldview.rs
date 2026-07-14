@@ -731,11 +731,7 @@ fn to_failure_fact(event: &WorldviewRecord) -> Option<FailureFact> {
             if issues == 0 {
                 return None;
             }
-            let files_key = if event_type == "ruff" {
-                "files"
-            } else {
-                "files"
-            };
+            let files_key = "files";
             if let Some(files) = payload.get("offense_files").and_then(|v| v.as_array()) {
                 for value in files.iter().take(5) {
                     if let Some(path) = value.get("path").and_then(|v| v.as_str()) {
@@ -2396,6 +2392,9 @@ fn normalize_transient_output(output: &str) -> String {
     normalized
 }
 
+// The renderer consumes distinct prompt sections; keeping slices explicit makes
+// ordering and omission visible at the call site.
+#[allow(clippy::too_many_arguments)]
 fn render_prompt(
     goal: Option<&str>,
     project_path: &str,

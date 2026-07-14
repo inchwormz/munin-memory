@@ -1627,9 +1627,7 @@ pub fn build_doctor_report(
         name: "Strategy metrics are instrumented".to_string(),
         status: if strategy_metrics.is_ok() && !strategy_metrics_empty {
             "pass"
-        } else if strategy_metrics.is_ok() {
-            "warn"
-        } else if has_partial_strategy_memory {
+        } else if strategy_metrics.is_ok() || has_partial_strategy_memory {
             "warn"
         } else {
             "fail"
@@ -2956,7 +2954,7 @@ pub(crate) fn record_brief_context_event(
 
     let packet_id = format!(
         "memory-os-brief-{}",
-        report.generated_at.replace(':', "-").replace('.', "-")
+        report.generated_at.replace([':', '.'], "-")
     );
     let items = brief_context_items(report);
     tracker.record_context_item_events(
@@ -4183,8 +4181,7 @@ mod tests {
 
     #[test]
     fn rank_brief_findings_prefers_prose_and_filters_command_noise() {
-        let findings = vec![
-            MemoryOsNarrativeFinding {
+        let findings = [MemoryOsNarrativeFinding {
                 title: "cd C:/Users/OEM/Projects && node script.js".to_string(),
                 summary: "cd C:/Users/OEM/Projects && node script.js".to_string(),
                 evidence: vec![],
@@ -4200,8 +4197,7 @@ mod tests {
                 title: "workspace-root".to_string(),
                 summary: "627 sessions, 24623 shell executions".to_string(),
                 evidence: vec![],
-            },
-        ];
+            }];
 
         let ranked = rank_brief_findings(findings.iter(), 3);
         assert_eq!(ranked.len(), 1);

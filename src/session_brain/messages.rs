@@ -768,6 +768,9 @@ fn parse_claude_messages(path: &Path, session_id: &str) -> Result<SessionMessage
     })
 }
 
+// Transcript normalization requires every source coordinate to remain explicit
+// so deduplication and provenance cannot silently fall back to defaults.
+#[allow(clippy::too_many_arguments)]
 fn push_message(
     target: &mut Vec<SessionBrainMessage>,
     seen: &mut HashSet<String>,

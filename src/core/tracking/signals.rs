@@ -601,6 +601,13 @@ struct UserProseFrictionSpec {
     all: &'static [&'static str],
 }
 
+type UserProseFrictionMatch = (
+    &'static UserProseFrictionSpec,
+    HashSet<String>,
+    Option<DateTime<Utc>>,
+    Vec<String>,
+);
+
 const USER_PROSE_ACTIONABLE_FRICTION_SPECS: &[UserProseFrictionSpec] = &[
     UserProseFrictionSpec {
         id: "resume-from-last-checkpoint",
@@ -919,15 +926,7 @@ fn user_prose_actionable_friction_fixes(
     durable_fixes: &UserProseDurableFixes,
     now: DateTime<Utc>,
 ) -> Vec<crate::core::memory_os::MemoryOsFrictionFix> {
-    let mut matched: BTreeMap<
-        &'static str,
-        (
-            &'static UserProseFrictionSpec,
-            HashSet<String>,
-            Option<DateTime<Utc>>,
-            Vec<String>,
-        ),
-    > = BTreeMap::new();
+    let mut matched: BTreeMap<&'static str, UserProseFrictionMatch> = BTreeMap::new();
 
     for checkpoint in checkpoints
         .iter()
@@ -3292,7 +3291,7 @@ impl Tracker {
 
         let mut totals = MemoryOsRedirectAccumulator::default();
         for (project, mut project_checkpoints) in grouped {
-            project_checkpoints.sort_by(|left, right| left.captured_at.cmp(&right.captured_at));
+            project_checkpoints.sort_by_key(|left| left.captured_at);
             let mut saw_project_redirect = false;
             for window in project_checkpoints.windows(2) {
                 let previous = &window[0].capture;

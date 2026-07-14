@@ -282,19 +282,15 @@ impl AggregateStats {
     }
 
     fn avg_input_tokens(&self) -> usize {
-        if self.command_count > 0 {
-            self.input_tokens / self.command_count
-        } else {
-            0
-        }
+        self.input_tokens
+            .checked_div(self.command_count)
+            .unwrap_or(0)
     }
 
     fn avg_output_tokens(&self) -> usize {
-        if self.command_count > 0 {
-            self.output_tokens / self.command_count
-        } else {
-            0
-        }
+        self.output_tokens
+            .checked_div(self.command_count)
+            .unwrap_or(0)
     }
 
     fn aggregate_savings_pct(&self) -> f64 {

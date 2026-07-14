@@ -187,6 +187,9 @@ fn looks_sensitive_command(command: &str) -> bool {
 }
 
 impl Tracker {
+    // This is the normalized SQLite observation boundary; each argument maps to
+    // a separately persisted or hashed protocol field.
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn record_memory_os_action_observation(
         &self,
         project_path: &str,

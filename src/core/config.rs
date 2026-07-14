@@ -116,6 +116,7 @@ impl ProactivityConfig {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(default)]
+#[derive(Default)]
 pub struct StrategyConfig {
     pub enabled: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -124,17 +125,6 @@ pub struct StrategyConfig {
     pub directory: Option<PathBuf>,
     #[serde(default)]
     pub scopes: BTreeMap<String, StrategyScopeConfig>,
-}
-
-impl Default for StrategyConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            default_scope: None,
-            directory: None,
-            scopes: BTreeMap::new(),
-        }
-    }
 }
 
 impl StrategyConfig {

@@ -41,6 +41,9 @@ pub struct ClaimSuggestion {
     evidence: Vec<String>,
 }
 
+// The CLI adapter mirrors the explicit claim-lease fields; grouping them would
+// only move validation out of view without simplifying the boundary.
+#[allow(clippy::too_many_arguments)]
 pub fn add(
     claim_type: ClaimLeaseType,
     claim: &str,
@@ -412,6 +415,10 @@ fn has_matching_live_claim(
     })
 }
 
+fn current_project_path_string() -> String {
+    crate::core::utils::current_project_root_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -497,8 +504,4 @@ mod tests {
             ]
         ));
     }
-}
-
-fn current_project_path_string() -> String {
-    crate::core::utils::current_project_root_string()
 }

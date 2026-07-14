@@ -355,6 +355,9 @@ fn severity_from_confidence(confidence: &str) -> &'static str {
     }
 }
 
+// Open-loop identity and projection fields stay explicit because merge policy
+// depends on their independent values.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn upsert_memory_os_open_loop(
     open_loops: &mut Vec<crate::core::memory_os::MemoryOsOpenLoopProjection>,
     index: &mut HashMap<String, usize>,

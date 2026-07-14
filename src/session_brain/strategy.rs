@@ -84,10 +84,10 @@ fn resolve_relevant_scopes(config: &Config, project_root: &Path) -> Vec<String> 
             .strategy
             .scopes
             .iter()
-            .filter_map(|(scope_id, scope)| {
-                (scope.enabled && scope_matches_project(scope, &project_root))
-                    .then(|| scope_id.clone())
-            }),
+            .filter(|&(_scope_id, scope)| {
+                scope.enabled && scope_matches_project(scope, &project_root)
+            })
+            .map(|(scope_id, _scope)| scope_id.clone()),
     );
 
     scopes

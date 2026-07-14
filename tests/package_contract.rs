@@ -173,6 +173,91 @@ fn public_trust_contract_is_complete_and_packaged() {
 }
 
 #[test]
+fn provenance_gate_rejects_a_mismatched_binary_then_accepts_the_real_binary() {
+    let manifest = std::fs::read_to_string("Cargo.toml").expect("Cargo.toml");
+    assert!(manifest.contains("/scripts/munin-provenance-check.ps1"));
+
+    let temp = tempfile::tempdir().expect("temp dir");
+    let fake = temp.path().join("fake-munin.ps1");
+    std::fs::write(
+        &fake,
+        r#"$command = $args -join " "
+if ($command -eq "--version") {
+    Write-Output "munin 9.9.9"
+    exit 0
+}
+if ($command -eq "mcp serve") {
+    Write-Output '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-11-25","serverInfo":{"name":"munin-memory","version":"9.9.9"}}}'
+    exit 0
+}
+exit 2
+"#,
+    )
+    .expect("fake Munin");
+
+    let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let script = repo.join("scripts/munin-provenance-check.ps1");
+    let run = |binary: &std::path::Path| {
+        std::process::Command::new("pwsh")
+            .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
+            .arg(&script)
+            .arg("-MuninBin")
+            .arg(binary)
+            .arg("-RepoRoot")
+            .arg(repo)
+            .output()
+            .expect("run provenance gate")
+    };
+
+    let rejected = run(&fake);
+    assert_eq!(rejected.status.code(), Some(1));
+    let rejected_output = format!(
+        "{}\n{}",
+        String::from_utf8_lossy(&rejected.stdout),
+        String::from_utf8_lossy(&rejected.stderr)
+    );
+    assert!(
+        rejected_output.contains("Status: FAIL")
+            || rejected_output.contains("version surfaces differ"),
+        "provenance falsifier failed without a version diagnosis:\n{rejected_output}"
+    );
+
+    let accepted = run(std::path::Path::new(env!("CARGO_BIN_EXE_munin")));
+    assert!(
+        accepted.status.success(),
+        "real provenance gate failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&accepted.stdout),
+        String::from_utf8_lossy(&accepted.stderr)
+    );
+    assert!(String::from_utf8_lossy(&accepted.stdout).contains("Artifacts hashed: 8"));
+}
+
+#[test]
+fn quality_and_supply_chain_ci_gates_are_executable() {
+    let workflow = std::fs::read_to_string(".github/workflows/ci.yml").expect("CI workflow");
+    for required in [
+        "permissions:\n  contents: read",
+        "cargo clippy --locked --all-targets -- -D warnings",
+        "dtolnay/rust-toolchain@1.78.0",
+        "cargo check --locked --all-targets",
+        "command: check licenses advisories",
+        "test_old_commands_schema_migrates_to_current_without_losing_rows -- --exact",
+        "cargo package --locked",
+        "munin-provenance-check.ps1",
+    ] {
+        assert!(workflow.contains(required), "CI gate missing: {required}");
+    }
+
+    let deny = std::fs::read_to_string("deny.toml").expect("deny.toml");
+    assert!(deny.contains("[advisories]"));
+    assert!(deny.contains("ignore = []"));
+
+    let manifest = std::fs::read_to_string("Cargo.toml").expect("Cargo.toml");
+    assert!(manifest.contains("/.cargo/config.toml"));
+    assert!(manifest.contains("/scripts/munin-provenance-check.ps1"));
+}
+
+#[test]
 fn release_check_fails_closed_on_warnings() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let fake_munin = temp_dir.path().join("fake-munin.ps1");

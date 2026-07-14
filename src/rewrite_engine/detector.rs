@@ -368,7 +368,7 @@ pub fn deduplicate_corrections(pairs: Vec<CorrectionPair>) -> Vec<CorrectionRule
     }
 
     // Sort by occurrences descending (most common mistakes first)
-    rules.sort_by(|a, b| b.occurrences.cmp(&a.occurrences));
+    rules.sort_by_key(|rule| std::cmp::Reverse(rule.occurrences));
 
     rules
 }

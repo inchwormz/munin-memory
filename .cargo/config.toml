@@ -1,0 +1,3 @@
+[resolver]
+# Keep dependency updates within the package's declared Rust 1.78 support.
+incompatible-rust-versions = "fallback"

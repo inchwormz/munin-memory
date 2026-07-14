@@ -1989,7 +1989,7 @@ fn validate_resolver_trigger_fixtures() -> Result<usize> {
     let mut checked = 0usize;
     let mut fixture_routes = std::collections::BTreeSet::new();
     for (fixture_name, content) in RESOLVER_TRIGGER_FIXTURES {
-        let fixture: ResolverTriggerFixture = serde_json::from_str(&content)
+        let fixture: ResolverTriggerFixture = serde_json::from_str(content)
             .with_context(|| format!("failed to parse fixture {}", fixture_name))?;
         let rule = core::access_layer::intent_rules::INTENT_RULES
             .iter()

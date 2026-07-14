@@ -259,7 +259,7 @@ fn friction(input: FrictionInput) -> Result<Value> {
         .chain(report.new_unproven_friction)
         .filter(|fix| input.include_resolved || !is_resolved_status(&fix.status))
         .collect::<Vec<_>>();
-    fixes.sort_by(|left, right| right.score.cmp(&left.score));
+    fixes.sort_by_key(|fix| std::cmp::Reverse(fix.score));
     let found = fixes.len();
     fixes.truncate(limit);
     let provenance = fixes

@@ -95,7 +95,7 @@ fn artifact_location_from_root(root: PathBuf) -> ArtifactLocation {
 }
 
 fn legacy_artifact_location_from_config(config: &Config) -> Result<Option<ArtifactLocation>> {
-    if !config.artifacts.directory.is_none() || std::env::var("MUNIN_ARTIFACTS_DIR").is_ok() {
+    if config.artifacts.directory.is_some() || std::env::var("MUNIN_ARTIFACTS_DIR").is_ok() {
         return Ok(None);
     }
     let data_dir = dirs::data_local_dir()
@@ -640,17 +640,6 @@ pub(crate) fn load_artifact_text_with_config(config: &Config, artifact_id: &str)
     let path = resolve_blob_path_from_artifact_id_with_config(config, artifact_id)?;
     std::fs::read_to_string(&path)
         .with_context(|| format!("failed to read artifact {}", path.display()))
-}
-
-#[cfg(test)]
-pub(crate) fn prepare_output_for_display_for_test(
-    command_sig: &str,
-    text: &str,
-    source_layer: &str,
-    config: &Config,
-    cwd: &str,
-) -> Result<ArtifactRenderResult> {
-    prepare_output_for_display_with_config(command_sig, text, source_layer, config, cwd)
 }
 
 fn parse_line_range(spec: &str) -> Result<(usize, usize)> {

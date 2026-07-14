@@ -1154,6 +1154,9 @@ impl Tracker {
         Ok(())
     }
 
+    // Worldview event fields mirror the durable row and remain explicit so
+    // provenance cannot be omitted by a defaulted options structure.
+    #[allow(clippy::too_many_arguments)]
     pub fn record_worldview_event(
         &self,
         event_type: &str,
@@ -1177,6 +1180,7 @@ impl Tracker {
         )
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn record_worldview_event_for_project(
         &self,
         project_path: &str,
@@ -1200,6 +1204,7 @@ impl Tracker {
         )
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn insert_worldview_event(
         &self,
         project_path: &str,
@@ -1307,6 +1312,7 @@ impl Tracker {
         Ok(status.to_string())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn record_worldview_replay_event_for_project(
         &self,
         project_path: &str,
@@ -2568,6 +2574,65 @@ mod tests {
         assert_eq!(summary.estimated_source_tokens, 243);
         assert_eq!(summary.rendered_tokens, 243);
         assert_eq!(summary.context_reuse_saved, 0);
+    }
+
+    #[test]
+    fn test_old_commands_schema_migrates_to_current_without_losing_rows() {
+        let tmp = TempDir::new().expect("temp dir");
+        let db_path = tmp.path().join("old-schema.db");
+        {
+            let conn = Connection::open(&db_path).expect("old database");
+            conn.execute_batch(
+                "CREATE TABLE commands (
+                    id INTEGER PRIMARY KEY,
+                    timestamp TEXT NOT NULL,
+                    original_cmd TEXT NOT NULL,
+                    context_cmd TEXT NOT NULL,
+                    input_tokens INTEGER NOT NULL,
+                    output_tokens INTEGER NOT NULL,
+                    saved_tokens INTEGER NOT NULL,
+                    savings_pct REAL NOT NULL
+                );
+                INSERT INTO commands (
+                    timestamp, original_cmd, context_cmd, input_tokens,
+                    output_tokens, saved_tokens, savings_pct
+                ) VALUES (
+                    '2025-01-01T00:00:00Z', 'legacy command',
+                    'legacy context', 10, 5, 5, 50.0
+                );",
+            )
+            .expect("seed old schema");
+        }
+
+        let tracker = Tracker::new_at_path(&db_path).expect("migrate old database");
+        let migrated: (String, i64, String) = tracker
+            .conn
+            .query_row(
+                "SELECT original_cmd, exec_time_ms, project_path FROM commands",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .expect("preserved migrated row");
+        assert_eq!(migrated, ("legacy command".to_string(), 0, String::new()));
+
+        for table in [
+            "artifact_events",
+            "context_events",
+            "claim_leases",
+            "approval_jobs",
+            "memory_os_journal_events",
+            "memory_os_action_executions",
+        ] {
+            let exists: bool = tracker
+                .conn
+                .query_row(
+                    "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1)",
+                    [table],
+                    |row| row.get(0),
+                )
+                .expect("table check");
+            assert!(exists, "current table missing after migration: {table}");
+        }
     }
 
     #[test]

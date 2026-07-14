@@ -1,3 +1,7 @@
+[advisories]
+# No suppressed advisories. Remediate or remove affected dependencies.
+ignore = []
+
 [licenses]
 confidence-threshold = 0.8
 allow = [
@@ -6,8 +10,8 @@ allow = [
   "BSD-2-Clause",
   "BSD-3-Clause",
   "ISC",
-"Unicode-3.0",
-"CDLA-Permissive-2.0",
-"Zlib",
-"MPL-2.0",
+  "Unicode-3.0",
+  "CDLA-Permissive-2.0",
+  "Zlib",
+  "MPL-2.0",
 ]

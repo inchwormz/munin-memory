@@ -832,7 +832,7 @@ fn plugin_list_args(_host: AgentHost) -> Vec<&'static OsStr> {
     vec![os("plugin"), os("list"), os("--json")]
 }
 
-fn marketplace_add_args<'a>(host: AgentHost, bundle: &'a Path) -> Vec<&'a OsStr> {
+fn marketplace_add_args(host: AgentHost, bundle: &Path) -> Vec<&OsStr> {
     match host {
         AgentHost::Codex => vec![
             os("plugin"),

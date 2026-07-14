@@ -557,9 +557,7 @@ pub fn approve(options: &ProactivityApproveOptions) -> Result<ProactivityApprove
         let result_path_text = result_path.display().to_string();
         let _ = tracker.set_approval_job_status(
             &options.job_id,
-            if launched {
-                crate::core::tracking::ApprovalJobStatus::Approved
-            } else if claimed {
+            if launched || claimed {
                 crate::core::tracking::ApprovalJobStatus::Approved
             } else {
                 crate::core::tracking::ApprovalJobStatus::Queued
@@ -2036,7 +2034,6 @@ fn reconstruct_job_from_approval_record(
     let files = file_set_for_job(&runtime, &record.job_id, &record.local_date)?;
     let intervention_job_ids = related_jobs
         .iter()
-        .into_iter()
         .filter(|job| {
             job.job_id != record.job_id
                 && job.local_date == record.local_date
@@ -2188,7 +2185,7 @@ fn ensure_job_projection(paths: &ProactivityPaths, job_id: &str) -> Result<Optio
         };
         let result_path_text = Path::new(&job.result_path)
             .exists()
-            .then(|| job.result_path.as_str());
+            .then_some(job.result_path.as_str());
         let _ = tracker.set_approval_job_status(
             &record.job_id,
             record.status,
@@ -2559,7 +2556,7 @@ fn install_scheduled_task(
 ) -> Result<()> {
     #[cfg(windows)]
     {
-        return install_windows_task(name, exe, args, schedule);
+        install_windows_task(name, exe, args, schedule)
     }
     #[cfg(target_os = "macos")]
     {
@@ -2578,7 +2575,7 @@ fn install_scheduled_task(
 fn delete_scheduled_task(name: &str) -> Result<()> {
     #[cfg(windows)]
     {
-        return delete_windows_task(name);
+        delete_windows_task(name)
     }
     #[cfg(target_os = "macos")]
     {
@@ -2976,7 +2973,7 @@ fn xml_escape(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::config::{ProactivityConfig, StrategyConfig};
+    use crate::core::config::ProactivityConfig;
     use crate::core::memory_os::{MemoryOsImportedSourceSummary, MemoryOsOnboardingState};
     use std::sync::Mutex;
 
@@ -4208,7 +4205,6 @@ mod tests {
     #[test]
     fn strategy_scope_resolution_prefers_proactivity_default_scope() {
         let mut config = Config::default();
-        config.strategy = StrategyConfig::default();
         config.proactivity.default_scope = Some("custom-scope".to_string());
         assert_eq!(
             config

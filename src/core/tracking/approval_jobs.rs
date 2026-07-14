@@ -124,43 +124,6 @@ fn autonomy_behavior_variant(item_id: &str) -> bool {
     )
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn command_friction_item_ids_share_a_completion_family() {
-        assert!(friction_fix_item_ids_related(
-            Some("friction:user-command-noise"),
-            Some("friction:path-assumption-drift")
-        ));
-        assert!(friction_fix_item_ids_related(
-            Some("friction:cli-syntax-drift"),
-            Some("friction:execution-assumption-drift")
-        ));
-        assert!(!friction_fix_item_ids_related(
-            Some("friction:cli-syntax-drift"),
-            Some("friction:autonomy-polling")
-        ));
-    }
-
-    #[test]
-    fn autonomy_polling_umbrella_covers_agent_behavior_variants() {
-        assert!(friction_fix_item_ids_related(
-            Some("friction:autonomy-polling"),
-            Some("friction:behavior:codex")
-        ));
-        assert!(!friction_fix_item_ids_related(
-            Some("friction:behavior:claude"),
-            Some("friction:autonomy-polling")
-        ));
-        assert!(!friction_fix_item_ids_related(
-            Some("friction:behavior:claude"),
-            Some("friction:path-assumption-drift")
-        ));
-    }
-}
-
 impl Tracker {
     pub fn upsert_approval_job_for_project(
         &self,
@@ -441,5 +404,42 @@ impl Tracker {
         };
 
         Ok(rows.collect::<Result<Vec<_>, _>>()?)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn command_friction_item_ids_share_a_completion_family() {
+        assert!(friction_fix_item_ids_related(
+            Some("friction:user-command-noise"),
+            Some("friction:path-assumption-drift")
+        ));
+        assert!(friction_fix_item_ids_related(
+            Some("friction:cli-syntax-drift"),
+            Some("friction:execution-assumption-drift")
+        ));
+        assert!(!friction_fix_item_ids_related(
+            Some("friction:cli-syntax-drift"),
+            Some("friction:autonomy-polling")
+        ));
+    }
+
+    #[test]
+    fn autonomy_polling_umbrella_covers_agent_behavior_variants() {
+        assert!(friction_fix_item_ids_related(
+            Some("friction:autonomy-polling"),
+            Some("friction:behavior:codex")
+        ));
+        assert!(!friction_fix_item_ids_related(
+            Some("friction:behavior:claude"),
+            Some("friction:autonomy-polling")
+        ));
+        assert!(!friction_fix_item_ids_related(
+            Some("friction:behavior:claude"),
+            Some("friction:path-assumption-drift")
+        ));
     }
 }

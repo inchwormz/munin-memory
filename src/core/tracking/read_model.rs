@@ -189,7 +189,7 @@ fn focused_user_prose_summary(text: &str) -> String {
     let mut selected = Vec::new();
 
     for sentence in compact
-        .split(|ch: char| matches!(ch, '.' | '?' | '!'))
+        .split(['.', '?', '!'])
         .map(str::trim)
         .filter(|sentence| sentence.split_whitespace().count() >= 4)
     {
@@ -434,160 +434,6 @@ fn user_prose_title_priority(title: &str) -> i32 {
         "Frustration signal" => 7,
         "Positive feedback" => 8,
         _ => 9,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::core::memory_os::{MemoryOsCheckpointCapture, MemoryOsCheckpointReentry};
-
-    #[test]
-    fn user_prose_score_prioritizes_frustration_and_correction_signals() {
-        let neutral = "Please review the next step carefully before changing the code again.";
-        let frustrated = "What the hell are you doing? Don't tell me this command noise is useful!";
-
-        assert!(user_prose_score(frustrated) > user_prose_score(neutral));
-        assert!(meaningful_user_prose_summary("Fuck!").is_none());
-    }
-
-    #[test]
-    fn user_prose_score_keeps_positive_feedback_as_a_weaker_signal() {
-        let neutral = "Please review the next step carefully before changing the code again.";
-        let positive = "Good job, nice one, thank you, that was much better than before.";
-        let frustrated = "WTF, why would you do that? Stop showing useless command noise!";
-
-        assert!(user_prose_score(positive) > user_prose_score(neutral));
-        assert!(user_prose_score(frustrated) > user_prose_score(positive));
-    }
-
-    #[test]
-    fn user_prose_summary_filters_command_noise() {
-        assert!(meaningful_user_prose_summary(
-            "context proxy powershell -NoProfile -Command cargo test"
-        )
-        .is_none());
-        assert!(meaningful_user_prose_summary(
-            "Read C:\\Users\\OEM\\Projects\\example-project\\.omx2\\codex-state\\team\\x\\workers\\worker-1\\inbox.md and execute your assignment."
-        )
-        .is_none());
-        assert_eq!(
-            meaningful_user_prose_summary(
-                "[$prompt-master] I need you to undo the font change and keep the layout stable."
-            ),
-            Some("I need you to undo the font change and keep the layout stable".to_string())
-        );
-        assert!(meaningful_user_prose_summary(
-            "I want the brief to show prose instead of raw command noise."
-        )
-        .is_some());
-    }
-
-    #[test]
-    fn user_prose_title_maps_signals_to_useful_sections() {
-        assert_eq!(
-            user_prose_title("I want it on Gate. I just want it on Site Sorted."),
-            "Example project focus"
-        );
-        assert_eq!(
-            user_prose_title("What the hell are you doing? This is useless command noise."),
-            "Frustration signal"
-        );
-        assert_eq!(
-            user_prose_title("Good job, nice one, that was much better."),
-            "Positive feedback"
-        );
-        assert_eq!(
-            user_prose_title("okay please commit the unfinished work, then start pickup plan"),
-            "Current work"
-        );
-        assert_eq!(
-            user_prose_title(
-                "please review and inspect memory os output and work on it if its still not returning good data"
-            ),
-            "Current work"
-        );
-        assert_ne!(
-            user_prose_title("we havent deleted 33k lines of code today"),
-            "Current work"
-        );
-        assert!(meaningful_user_prose_summary(
-            "Tell me what you know about me and how I like to work."
-        )
-        .is_none());
-    }
-
-    #[test]
-    fn build_memory_os_user_prose_findings_prefers_title_diversity() {
-        let checkpoint =
-            |packet_id: &str, generated_at: &str, goal: &str| MemoryOsCheckpointEnvelope {
-                project_path: "C:/repo".to_string(),
-                captured_at: DateTime::parse_from_rfc3339(generated_at)
-                    .expect("timestamp")
-                    .with_timezone(&Utc),
-                capture: MemoryOsCheckpointCapture {
-                    packet_id: packet_id.to_string(),
-                    generated_at: generated_at.to_string(),
-                    preset: "resume".to_string(),
-                    intent: "continue".to_string(),
-                    profile: "session-onboarding".to_string(),
-                    goal: Some(goal.to_string()),
-                    budget: 1600,
-                    estimated_tokens: 0,
-                    estimated_source_tokens: 0,
-                    pager_manifest_hash: "manifest".to_string(),
-                    recall_mode: "off".to_string(),
-                    recall_used: false,
-                    recall_reason: "session-onboarding".to_string(),
-                    telemetry: crate::core::memory_os::MemoryOsCheckpointTelemetry {
-                        current_fact_count: 0,
-                        recent_change_count: 0,
-                        live_claim_count: 0,
-                        open_obligation_count: 0,
-                        artifact_handle_count: 0,
-                        failure_count: 0,
-                    },
-                    selected_items: Vec::new(),
-                    exclusions: Vec::new(),
-                    reentry: MemoryOsCheckpointReentry {
-                        recommended_command: "munin resume --format prompt".to_string(),
-                        current_recommendation: None,
-                        first_question: "What still matters?".to_string(),
-                        first_verification: "Verify the next step.".to_string(),
-                    },
-                },
-            };
-
-        let findings = build_memory_os_user_prose_findings(
-            &[
-                checkpoint(
-                    "a",
-                    "2026-04-17T00:00:00Z",
-                    "I don't want to build something just for this benchmark. I want the broad Memory OS tool.",
-                ),
-                checkpoint(
-                    "b",
-                    "2026-04-17T01:00:00Z",
-                    "I want it on Gate. I just want it on Site Sorted.",
-                ),
-                checkpoint(
-                    "c",
-                    "2026-04-17T02:00:00Z",
-                    "okay please commit the unfinished work, then start pickup plan",
-                ),
-            ],
-            3,
-        );
-
-        assert!(findings
-            .iter()
-            .any(|finding| finding.title == "Memory OS direction"));
-        assert!(findings
-            .iter()
-            .any(|finding| finding.title == "Example project focus"));
-        assert!(findings
-            .iter()
-            .any(|finding| finding.title == "Current work"));
     }
 }
 
@@ -1041,8 +887,8 @@ pub(super) fn build_memory_os_preferences(
                 "Working preference" | "Product constraint" | "Positive feedback"
             )
         })
-        .cloned()
         .take(5)
+        .cloned()
         .collect()
 }
 
@@ -1190,5 +1036,159 @@ impl Tracker {
         }
 
         Ok(findings)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::memory_os::{MemoryOsCheckpointCapture, MemoryOsCheckpointReentry};
+
+    #[test]
+    fn user_prose_score_prioritizes_frustration_and_correction_signals() {
+        let neutral = "Please review the next step carefully before changing the code again.";
+        let frustrated = "What the hell are you doing? Don't tell me this command noise is useful!";
+
+        assert!(user_prose_score(frustrated) > user_prose_score(neutral));
+        assert!(meaningful_user_prose_summary("Fuck!").is_none());
+    }
+
+    #[test]
+    fn user_prose_score_keeps_positive_feedback_as_a_weaker_signal() {
+        let neutral = "Please review the next step carefully before changing the code again.";
+        let positive = "Good job, nice one, thank you, that was much better than before.";
+        let frustrated = "WTF, why would you do that? Stop showing useless command noise!";
+
+        assert!(user_prose_score(positive) > user_prose_score(neutral));
+        assert!(user_prose_score(frustrated) > user_prose_score(positive));
+    }
+
+    #[test]
+    fn user_prose_summary_filters_command_noise() {
+        assert!(meaningful_user_prose_summary(
+            "context proxy powershell -NoProfile -Command cargo test"
+        )
+        .is_none());
+        assert!(meaningful_user_prose_summary(
+            "Read C:\\Users\\OEM\\Projects\\example-project\\.omx2\\codex-state\\team\\x\\workers\\worker-1\\inbox.md and execute your assignment."
+        )
+        .is_none());
+        assert_eq!(
+            meaningful_user_prose_summary(
+                "[$prompt-master] I need you to undo the font change and keep the layout stable."
+            ),
+            Some("I need you to undo the font change and keep the layout stable".to_string())
+        );
+        assert!(meaningful_user_prose_summary(
+            "I want the brief to show prose instead of raw command noise."
+        )
+        .is_some());
+    }
+
+    #[test]
+    fn user_prose_title_maps_signals_to_useful_sections() {
+        assert_eq!(
+            user_prose_title("I want it on Gate. I just want it on Site Sorted."),
+            "Example project focus"
+        );
+        assert_eq!(
+            user_prose_title("What the hell are you doing? This is useless command noise."),
+            "Frustration signal"
+        );
+        assert_eq!(
+            user_prose_title("Good job, nice one, that was much better."),
+            "Positive feedback"
+        );
+        assert_eq!(
+            user_prose_title("okay please commit the unfinished work, then start pickup plan"),
+            "Current work"
+        );
+        assert_eq!(
+            user_prose_title(
+                "please review and inspect memory os output and work on it if its still not returning good data"
+            ),
+            "Current work"
+        );
+        assert_ne!(
+            user_prose_title("we havent deleted 33k lines of code today"),
+            "Current work"
+        );
+        assert!(meaningful_user_prose_summary(
+            "Tell me what you know about me and how I like to work."
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn build_memory_os_user_prose_findings_prefers_title_diversity() {
+        let checkpoint =
+            |packet_id: &str, generated_at: &str, goal: &str| MemoryOsCheckpointEnvelope {
+                project_path: "C:/repo".to_string(),
+                captured_at: DateTime::parse_from_rfc3339(generated_at)
+                    .expect("timestamp")
+                    .with_timezone(&Utc),
+                capture: MemoryOsCheckpointCapture {
+                    packet_id: packet_id.to_string(),
+                    generated_at: generated_at.to_string(),
+                    preset: "resume".to_string(),
+                    intent: "continue".to_string(),
+                    profile: "session-onboarding".to_string(),
+                    goal: Some(goal.to_string()),
+                    budget: 1600,
+                    estimated_tokens: 0,
+                    estimated_source_tokens: 0,
+                    pager_manifest_hash: "manifest".to_string(),
+                    recall_mode: "off".to_string(),
+                    recall_used: false,
+                    recall_reason: "session-onboarding".to_string(),
+                    telemetry: crate::core::memory_os::MemoryOsCheckpointTelemetry {
+                        current_fact_count: 0,
+                        recent_change_count: 0,
+                        live_claim_count: 0,
+                        open_obligation_count: 0,
+                        artifact_handle_count: 0,
+                        failure_count: 0,
+                    },
+                    selected_items: Vec::new(),
+                    exclusions: Vec::new(),
+                    reentry: MemoryOsCheckpointReentry {
+                        recommended_command: "munin resume --format prompt".to_string(),
+                        current_recommendation: None,
+                        first_question: "What still matters?".to_string(),
+                        first_verification: "Verify the next step.".to_string(),
+                    },
+                },
+            };
+
+        let findings = build_memory_os_user_prose_findings(
+            &[
+                checkpoint(
+                    "a",
+                    "2026-04-17T00:00:00Z",
+                    "I don't want to build something just for this benchmark. I want the broad Memory OS tool.",
+                ),
+                checkpoint(
+                    "b",
+                    "2026-04-17T01:00:00Z",
+                    "I want it on Gate. I just want it on Site Sorted.",
+                ),
+                checkpoint(
+                    "c",
+                    "2026-04-17T02:00:00Z",
+                    "okay please commit the unfinished work, then start pickup plan",
+                ),
+            ],
+            3,
+        );
+
+        assert!(findings
+            .iter()
+            .any(|finding| finding.title == "Memory OS direction"));
+        assert!(findings
+            .iter()
+            .any(|finding| finding.title == "Example project focus"));
+        assert!(findings
+            .iter()
+            .any(|finding| finding.title == "Current work"));
     }
 }
