@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use munin_memory::{
-    agent_hook, agent_plugin, analytics, core, mcp, proactivity_cmd, runtime_context,
+    agent_hook, agent_plugin, analytics, core, mcp, privacy, proactivity_cmd, runtime_context,
     session_brain, strategy_cmd,
 };
 use serde::{Deserialize, Serialize};
@@ -167,6 +167,12 @@ enum Commands {
         command: McpCommands,
     },
 
+    /// Inspect, export, retain, or forget Munin-owned local data
+    Privacy {
+        #[command(subcommand)]
+        command: PrivacyCommands,
+    },
+
     /// Resolve a natural-language request to the Munin read surface that should answer it
     Resolve {
         #[arg(short, long, default_value = "text")]
@@ -293,6 +299,52 @@ enum HookCommands {
 enum McpCommands {
     /// Serve newline-delimited JSON-RPC over standard input/output
     Serve,
+}
+
+#[derive(Subcommand)]
+enum PrivacyCommands {
+    /// Inventory Munin-owned local data without reading source transcripts
+    Inspect {
+        /// Output format
+        #[arg(short, long, default_value = "text")]
+        format: String,
+    },
+    /// Export a consistent snapshot of Munin-owned local data
+    Export {
+        /// New directory to create for the export
+        #[arg(long)]
+        output: PathBuf,
+        /// Output format
+        #[arg(short, long, default_value = "text")]
+        format: String,
+    },
+    /// Preview or apply compiled-row retention
+    Retention {
+        /// Number of days of compiled history to retain
+        #[arg(long)]
+        days: u32,
+        /// Save the policy and delete eligible compiled rows
+        #[arg(long, default_value_t = false)]
+        apply: bool,
+        /// Output format
+        #[arg(short, long, default_value = "text")]
+        format: String,
+    },
+    /// Delete exact-project rows or all Munin-owned state
+    Forget {
+        /// Exact project_path value to delete from compiled state
+        #[arg(long, conflicts_with = "all")]
+        project: Option<String>,
+        /// Delete all Munin-owned data and configuration
+        #[arg(long, default_value_t = false, conflicts_with = "project")]
+        all: bool,
+        /// Required exact acknowledgement: FORGET-MUNIN
+        #[arg(long)]
+        confirm: String,
+        /// Output format
+        #[arg(short, long, default_value = "text")]
+        format: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -774,6 +826,36 @@ fn run_cli() -> Result<i32> {
                 0
             }
         },
+        Commands::Privacy { command } => {
+            match command {
+                PrivacyCommands::Inspect { format } => {
+                    let receipt = privacy::inspect()?;
+                    render_json_or_text(&receipt, &format, || privacy::inspect_text(&receipt))?;
+                }
+                PrivacyCommands::Export { output, format } => {
+                    let receipt = privacy::export(&output)?;
+                    render_json_or_text(&receipt, &format, || privacy::export_text(&receipt))?;
+                }
+                PrivacyCommands::Retention {
+                    days,
+                    apply,
+                    format,
+                } => {
+                    let receipt = privacy::retention(days, apply)?;
+                    render_json_or_text(&receipt, &format, || privacy::retention_text(&receipt))?;
+                }
+                PrivacyCommands::Forget {
+                    project,
+                    all,
+                    confirm,
+                    format,
+                } => {
+                    let receipt = privacy::forget(project.as_deref(), all, &confirm)?;
+                    render_json_or_text(&receipt, &format, || privacy::forget_text(&receipt))?;
+                }
+            }
+            0
+        }
         Commands::Resolve { format, query } => {
             let source_status = session_brain::current_source_status();
             let report = core::resolver::resolve_with_source_status(

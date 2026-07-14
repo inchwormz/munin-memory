@@ -94,6 +94,17 @@ fn typed_mcp_distribution_is_packaged_and_documented() {
 }
 
 #[test]
+fn privacy_lifecycle_implementation_and_contract_are_packaged() {
+    let manifest = std::fs::read_to_string("Cargo.toml").expect("Cargo.toml");
+    for path in ["/src/privacy.rs", "/tests/privacy_contract.rs"] {
+        assert!(
+            manifest.contains(path),
+            "Cargo.toml include list must package {path}"
+        );
+    }
+}
+
+#[test]
 fn release_check_fails_closed_on_warnings() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let fake_munin = temp_dir.path().join("fake-munin.ps1");

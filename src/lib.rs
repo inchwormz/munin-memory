@@ -4,6 +4,7 @@ pub mod analytics;
 pub mod core;
 pub mod mcp;
 pub mod mcp_tools;
+pub mod privacy;
 pub mod proactivity_cmd;
 pub mod rewrite_engine;
 pub mod runtime_context;

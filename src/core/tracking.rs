@@ -1399,7 +1399,10 @@ impl Tracker {
     }
 
     fn cleanup_old_at(&self, now: DateTime<Utc>) -> Result<()> {
-        let cutoff = now - chrono::Duration::days(DEFAULT_HISTORY_DAYS);
+        let history_days = crate::core::config::Config::load()
+            .map(|config| i64::from(config.tracking.history_days))
+            .unwrap_or(DEFAULT_HISTORY_DAYS);
+        let cutoff = now - chrono::Duration::days(history_days);
         self.conn.execute(
             "DELETE FROM commands WHERE timestamp < ?1",
             params![cutoff.to_rfc3339()],
@@ -1707,6 +1710,10 @@ fn get_db_path() -> Result<PathBuf> {
 
     // Priority 3: Default platform-specific Munin location.
     Ok(crate::core::config::context_data_dir()?.join(HISTORY_DB))
+}
+
+pub fn history_database_path() -> Result<PathBuf> {
+    get_db_path()
 }
 
 /// Estimate token count from text using ~4 chars = 1 token heuristic.
@@ -2207,6 +2214,34 @@ mod tests {
             .read_maintenance_timestamp(MAINTENANCE_KEY_CLEANUP_OLD)
             .expect("read marker")
             .is_some());
+    }
+
+    #[test]
+    fn test_cleanup_old_if_due_respects_configured_history_days() {
+        let _guard = ENV_LOCK.lock().expect("env lock");
+        let (tmp, tracker) = temp_tracker();
+        let config_dir = tmp.path().join("config");
+        std::env::set_var("MUNIN_CONFIG_DIR", &config_dir);
+        let mut config = crate::core::config::Config::default();
+        config.tracking.history_days = 30;
+        config.save().expect("save retention config");
+
+        insert_command_row(
+            &tracker,
+            Utc::now() - chrono::Duration::days(31),
+            "outside-policy",
+        );
+        insert_command_row(
+            &tracker,
+            Utc::now() - chrono::Duration::days(29),
+            "inside-policy",
+        );
+        tracker.cleanup_old_if_due().expect("cleanup due");
+        std::env::remove_var("MUNIN_CONFIG_DIR");
+
+        let commands = tracker.get_recent(10).expect("remaining commands");
+        assert_eq!(commands.len(), 1);
+        assert_eq!(commands[0].context_cmd, "context inside-policy");
     }
 
     #[test]

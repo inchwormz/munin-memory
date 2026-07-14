@@ -236,3 +236,9 @@ Next: write and browser-host the Stage 1 native plugin lifecycle plan, starting 
 - **Task 1 GREEN:** Doctor no longer imports or repairs sessions. A process contract requires both routes to stay under two seconds, preserve exit `2` for an empty unhealthy profile, and create neither onboarding state nor import-lock files.
 - **Real-corpus proof:** the rebuilt GNU debug binary inspected 75 imported sessions in `649 ms`, returned report status `warn` with exit `1`, and wrote a 4,661-byte JSON report. This is a greater-than-276x latency reduction from the bounded 180-second witness; no session import ran.
 - **Next:** commit the fast Doctor mechanism, then begin the isolated privacy lifecycle RED.
+- **Task 2 RED:** `munin privacy` was absent, so the isolated process contract failed at CLI parsing before any profile mutation.
+- **Task 2 GREEN:** added inspect, consistent SQLite export with SHA-256 manifest, report-only/apply retention, exact-project forget, and all-owned-state forget. Destructive forget requires the exact `FORGET-MUNIN` acknowledgement and refuses the current workspace, home, or an ancestor root.
+- **Ownership proof:** the isolated lifecycle exported only Munin-owned data/config state, verified every manifest hash, deleted one old compiled row, deleted only the selected project's rows, then removed all resolved Munin state while preserving both the source-transcript sentinel and export.
+- **Retention proof:** report-only retention made no mutation; apply saved `history_days = 30`; the automatic cleanup unit test independently proved a 31-day row is removed while a 29-day row remains under that configured policy.
+- **Verification:** both privacy process tests passed, including the dangerous-root falsifier; the focused configured-cleanup test passed; the source and test contract are in the package include list.
+- **Next:** commit the privacy lifecycle, then publish and test the security, privacy, and incident-response contract.
