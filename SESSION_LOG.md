@@ -154,4 +154,9 @@ Next: write and browser-host the Stage 1 native plugin lifecycle plan, starting 
 - **Task 1 RED:** the repository contract test failed because `.agents/plugins/marketplace.json` did not exist.
 - **Task 1 GREEN:** the tracked dual-host marketplace contains exactly the nine user-facing memory skills; `cargo fmt --check` and the targeted GNU contract test pass; `claude plugin validate --strict .` passes.
 - **Real-host proof:** isolated Codex `0.144.3` and Claude Code `2.1.207` profiles each installed and listed `munin-memory@munin-memory` version `0.5.14` as enabled. Native uninstall plus marketplace removal returned both profiles to zero Munin plugins.
-- **Next:** commit Task 1, then execute the transactional host lifecycle task red-first.
+- **Task 2 RED:** both process tests failed because `munin plugin` did not exist. The pre-plan isolated witness also proved the legacy direct writer produced 76 files while both native host lists remained empty.
+- **Task 2 GREEN:** `munin plugin install|verify|uninstall` delegates to the selected native host manager, materializes a hash-checked versioned marketplace, writes schema-versioned receipts, and keeps legacy `munin install` as a forwarding command.
+- **Rollback proof:** a fake Claude install failure after a successful Codex install returned non-zero and removed only the Codex plugin/marketplace and Claude marketplace created by that transaction. The isolated host state returned to four absent state markers.
+- **Idempotence proof:** a repeat install reported `bundle_created=false`, `created_marketplace=false`, and `created_plugin=false`.
+- **Verification:** the two lifecycle tests and the filtered installer suite passed on `x86_64-pc-windows-gnu`. The compiler now reports the old direct-write installer as dead code; Task 3 removes it and adds reversible migration.
+- **Next:** commit Task 2, then add the migration-preservation test before deleting the duplicate installer path.

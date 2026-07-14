@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use munin_memory::{
-    analytics, core, proactivity_cmd, runtime_context, session_brain, strategy_cmd,
+    agent_plugin, analytics, core, proactivity_cmd, runtime_context, session_brain, strategy_cmd,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -148,6 +148,12 @@ enum Commands {
         check_resolvable: bool,
     },
 
+    /// Install, verify, or uninstall Munin through native host plugin managers
+    Plugin {
+        #[command(subcommand)]
+        command: AgentPluginCommands,
+    },
+
     /// Resolve a natural-language request to the Munin read surface that should answer it
     Resolve {
         #[arg(short, long, default_value = "text")]
@@ -208,6 +214,52 @@ enum Commands {
     Proactivity {
         #[command(subcommand)]
         command: ProactivityCommands,
+    },
+}
+
+#[derive(Subcommand)]
+enum AgentPluginCommands {
+    /// Install the native Munin plugin
+    Install {
+        /// Manage only the Codex plugin
+        #[arg(long, default_value_t = false)]
+        codex: bool,
+        /// Manage only the Claude plugin
+        #[arg(long, default_value_t = false)]
+        claude: bool,
+        /// Inspect and report without changing host state
+        #[arg(long, default_value_t = false)]
+        dry_run: bool,
+        /// Output format
+        #[arg(short, long, value_enum, default_value = "text")]
+        format: agent_plugin::AgentPluginFormat,
+    },
+    /// Verify the native Munin plugin identity, version, and enabled state
+    Verify {
+        /// Verify only the Codex plugin
+        #[arg(long, default_value_t = false)]
+        codex: bool,
+        /// Verify only the Claude plugin
+        #[arg(long, default_value_t = false)]
+        claude: bool,
+        /// Output format
+        #[arg(short, long, value_enum, default_value = "text")]
+        format: agent_plugin::AgentPluginFormat,
+    },
+    /// Uninstall the native Munin plugin and marketplace
+    Uninstall {
+        /// Manage only the Codex plugin
+        #[arg(long, default_value_t = false)]
+        codex: bool,
+        /// Manage only the Claude plugin
+        #[arg(long, default_value_t = false)]
+        claude: bool,
+        /// Inspect and report without changing host state
+        #[arg(long, default_value_t = false)]
+        dry_run: bool,
+        /// Output format
+        #[arg(short, long, value_enum, default_value = "text")]
+        format: agent_plugin::AgentPluginFormat,
     },
 }
 
@@ -664,17 +716,15 @@ fn run_cli() -> Result<i32> {
             force,
             keep_legacy,
             check_resolvable,
-        } => {
-            run_install(InstallOptions {
-                claude,
-                codex,
-                dry_run,
-                force,
-                keep_legacy,
-                check_resolvable,
-            })?;
-            0
-        }
+        } => run_install(InstallOptions {
+            claude,
+            codex,
+            dry_run,
+            force,
+            keep_legacy,
+            check_resolvable,
+        })?,
+        Commands::Plugin { command } => run_agent_plugin(command)?,
         Commands::Resolve { format, query } => {
             let source_status = session_brain::current_source_status();
             let report = core::resolver::resolve_with_source_status(
@@ -1559,49 +1609,80 @@ const LEGACY_SKILL_NAMES: &[&str] = &[
     "munin-rewrite",
 ];
 
-fn run_install(options: InstallOptions) -> Result<()> {
+fn run_install(options: InstallOptions) -> Result<i32> {
     if options.check_resolvable {
-        return run_check_resolvable();
+        run_check_resolvable()?;
+        return Ok(0);
     }
-    let install_claude = options.claude || !options.codex;
-    let install_codex = options.codex || !options.claude;
-    let home = install_home_dir()?;
-    let codex_home = codex_home_dir(&home);
-    let mut writes = 0usize;
+    if options.force || options.keep_legacy {
+        eprintln!(
+            "warning: --force and --keep-legacy are compatibility flags; native host managers own plugin replacement"
+        );
+    }
+    run_agent_plugin_request(
+        agent_plugin::LifecycleAction::Install,
+        options.codex,
+        options.claude,
+        options.dry_run,
+        agent_plugin::AgentPluginFormat::Text,
+    )
+}
 
-    if install_claude {
-        let root = home.join(".claude").join("skills");
-        writes += install_skills_at(
-            &root,
-            options.force,
-            options.dry_run,
-            options.keep_legacy,
-            "Claude",
-        )?;
-        let command_root = home.join(".claude").join("commands");
-        writes += install_claude_commands_at(&command_root, options.force, options.dry_run)?;
-        writes += install_claude_runtime_assets(&home, options.force, options.dry_run)?;
+fn run_agent_plugin(command: AgentPluginCommands) -> Result<i32> {
+    match command {
+        AgentPluginCommands::Install {
+            codex,
+            claude,
+            dry_run,
+            format,
+        } => run_agent_plugin_request(
+            agent_plugin::LifecycleAction::Install,
+            codex,
+            claude,
+            dry_run,
+            format,
+        ),
+        AgentPluginCommands::Verify {
+            codex,
+            claude,
+            format,
+        } => run_agent_plugin_request(
+            agent_plugin::LifecycleAction::Verify,
+            codex,
+            claude,
+            false,
+            format,
+        ),
+        AgentPluginCommands::Uninstall {
+            codex,
+            claude,
+            dry_run,
+            format,
+        } => run_agent_plugin_request(
+            agent_plugin::LifecycleAction::Uninstall,
+            codex,
+            claude,
+            dry_run,
+            format,
+        ),
     }
-    if install_codex {
-        let skill_root = codex_home.join("skills");
-        writes += install_skills_at(
-            &skill_root,
-            options.force,
-            options.dry_run,
-            options.keep_legacy,
-            "Codex",
-        )?;
-        let plugin_root = codex_home.join("plugins").join("munin-memory");
-        writes += install_codex_plugin(&codex_home, &plugin_root, options.force, options.dry_run)?;
-    }
+}
 
-    if options.dry_run {
-        println!("Munin install dry-run complete: {writes} planned writes.");
-    } else {
-        println!("Munin install complete: {writes} files written or refreshed.");
-        emit_strategy_bootstrap_hint();
-    }
-    Ok(())
+fn run_agent_plugin_request(
+    action: agent_plugin::LifecycleAction,
+    codex: bool,
+    claude: bool,
+    dry_run: bool,
+    format: agent_plugin::AgentPluginFormat,
+) -> Result<i32> {
+    let outcome = agent_plugin::run_lifecycle(agent_plugin::LifecycleRequest {
+        action,
+        codex,
+        claude,
+        dry_run,
+    })?;
+    agent_plugin::render_lifecycle(&outcome, format)?;
+    Ok(outcome.exit_code)
 }
 
 fn emit_strategy_bootstrap_hint() {
