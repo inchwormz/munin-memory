@@ -101,16 +101,31 @@ fn tool_call_placeholder(id: Value, message: &Value) -> Value {
     if !tool_names().contains(&name) {
         return error_response(id, -32602, "Unknown tool", Some(json!({"name": name})));
     }
-    success_response(
-        id,
-        json!({
-            "content": [{
-                "type": "text",
-                "text": format!("Munin MCP tool `{name}` is declared but not implemented yet.")
-            }],
-            "isError": true
-        }),
-    )
+    let arguments = message
+        .pointer("/params/arguments")
+        .cloned()
+        .unwrap_or_else(|| json!({}));
+    match crate::mcp_tools::call_tool(name, &arguments) {
+        Ok(structured) => {
+            let text = serde_json::to_string(&structured)
+                .unwrap_or_else(|_| "{\"error\":\"failed to serialize result\"}".to_string());
+            success_response(
+                id,
+                json!({
+                    "content": [{"type": "text", "text": text}],
+                    "structuredContent": structured,
+                    "isError": false
+                }),
+            )
+        }
+        Err(error) => success_response(
+            id,
+            json!({
+                "content": [{"type": "text", "text": error.to_string()}],
+                "isError": true
+            }),
+        ),
+    }
 }
 
 fn tool_names() -> [&'static str; 6] {
@@ -217,6 +232,7 @@ fn tool_definition(name: &str, title: &str, description: &str, input_schema: Val
         "title": title,
         "description": description,
         "inputSchema": input_schema,
+        "outputSchema": result_schema(),
         "annotations": {
             "title": title,
             "readOnlyHint": true,
@@ -224,6 +240,28 @@ fn tool_definition(name: &str, title: &str, description: &str, input_schema: Val
             "idempotentHint": true,
             "openWorldHint": false
         }
+    })
+}
+
+fn result_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "schemaVersion": {"type": "string", "const": "munin.mcp.result.v1"},
+            "tool": {"type": "string"},
+            "generatedAt": {"type": "string", "format": "date-time"},
+            "provenance": {"type": "array", "items": {"type": "object"}},
+            "freshness": {"type": "object"},
+            "sensitivity": {"type": "object"},
+            "warnings": {"type": "array", "items": {"type": "string"}},
+            "receipt": {"type": "object"},
+            "data": {"type": "object"}
+        },
+        "required": [
+            "schemaVersion", "tool", "generatedAt", "provenance", "freshness",
+            "sensitivity", "warnings", "receipt", "data"
+        ],
+        "additionalProperties": false
     })
 }
 

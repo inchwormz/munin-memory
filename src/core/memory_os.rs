@@ -568,6 +568,13 @@ pub struct MemoryOsRecallSessionSummary {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct MemoryOsSessionSummaryMatch {
+    pub source_ref: String,
+    pub captured_at: String,
+    pub summary: MemoryOsRecallSessionSummary,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct MemoryOsRecallMatch {
     pub title: String,
     pub answer: String,

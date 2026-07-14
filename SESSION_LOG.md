@@ -197,3 +197,12 @@ Next: write and browser-host the Stage 1 native plugin lifecycle plan, starting 
 - **Compatibility proof:** the server advertises MCP `2025-11-25` and echoes a supported `2025-06-18` client version. Unsupported versions negotiate to the current server pin.
 - **Verification:** `tests/mcp_contract.rs` passed `2 / 2`; the focused unit compatibility test passed `1 / 1`; the command completed with exit `0` after EOF.
 - **Next:** commit Task 1, then seed the typed six-tool corpus and capture the expected Task 2 RED.
+- **Task 2 RED:** the pinned isolated corpus reached `tools/call`, but `search` returned `isError=true` with `declared but not implemented yet`; the six-tool contract failed at the first adapter.
+- **Task 2 mechanism:** added one versioned `munin.mcp.result.v1` envelope and thin read-only adapters for search, exact session summary, project state, friction, strategy status, and health. Existing typed read models remain authoritative.
+- **Exactness:** session summary lookup matches exact `sessionId` plus optional source/project; it does not reuse fuzzy topic recall. Nested legacy structs are normalized to camelCase only at the MCP boundary, leaving existing CLI JSON unchanged.
+- **Read-only correction:** strategy now has explicit `inspect_read_only` and `status_read_only` paths. They do not perform the existing empty-kernel rehydration write. MCP health also uses the read-only strategy inspect path.
+- **Privacy behavior:** every result runs the existing trust scanner. Secret-shaped values are redacted before output, sensitivity is labeled, and a focused falsifier proved `api_key=...` becomes `[REDACTED]` with `classification=restricted`.
+- **Coverage proof:** seeded two resolver matches and requested `limit=1`; the result reported at least `found=2`, `returned=1`, and `dropped=found-1`.
+- **Fresh verification:** all four process-level MCP contract tests passed, including malformed protocol input and invalid tool arguments. The secret-redaction unit test passed. GNU `cargo check --locked` completed warning-free.
+- **Mutation proof:** a recursive SHA-256 digest of the isolated profile (excluding SQLite transient WAL/SHM files) was identical before and after all six calls, including strategy and health.
+- **Next:** commit Task 2, then falsify and implement native Codex/Claude MCP declarations in isolated profiles.

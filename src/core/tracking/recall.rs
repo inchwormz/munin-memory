@@ -210,6 +210,47 @@ impl Tracker {
             no_match_reason,
         })
     }
+
+    pub fn get_memory_os_session_summary_matches(
+        &self,
+        project_path: Option<&str>,
+        session_id: &str,
+        source: Option<&str>,
+    ) -> Result<Vec<crate::core::memory_os::MemoryOsSessionSummaryMatch>> {
+        let scope = if project_path.is_some() {
+            crate::core::memory_os::MemoryOsInspectionScope::Project
+        } else {
+            crate::core::memory_os::MemoryOsInspectionScope::User
+        };
+        let checkpoints = self.load_memory_os_checkpoint_captures(scope, project_path)?;
+        let mut matches = Vec::new();
+        for checkpoint in checkpoints {
+            for item in &checkpoint.capture.selected_items {
+                let Some(summary) =
+                    structured_session_summary_for_recall(item, &checkpoint.project_path)
+                else {
+                    continue;
+                };
+                if summary.session_id.as_deref() != Some(session_id) {
+                    continue;
+                }
+                if source.is_some() && summary.source.as_deref() != source {
+                    continue;
+                }
+                matches.push(crate::core::memory_os::MemoryOsSessionSummaryMatch {
+                    source_ref: format!("checkpoint:{}", checkpoint.capture.packet_id),
+                    captured_at: checkpoint.capture.generated_at.clone(),
+                    summary,
+                });
+            }
+        }
+        matches.sort_by(|left, right| right.captured_at.cmp(&left.captured_at));
+        matches.dedup_by(|left, right| {
+            left.summary.session_id == right.summary.session_id
+                && left.summary.source == right.summary.source
+        });
+        Ok(matches)
+    }
 }
 
 fn query_tokens(query: &str) -> Vec<String> {

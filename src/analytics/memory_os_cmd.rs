@@ -90,56 +90,56 @@ struct MemoryOsInspectReport {
 }
 
 #[derive(Debug, Clone, Serialize)]
-struct MemoryOsDoctorCorpusSource {
-    source: String,
-    imported_sessions: usize,
-    import_status: String,
+pub struct MemoryOsDoctorCorpusSource {
+    pub source: String,
+    pub imported_sessions: usize,
+    pub import_status: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
-struct MemoryOsDoctorCorpus {
-    onboarding_status: String,
-    onboarding_completed_at: Option<String>,
-    sessions_processed: usize,
-    shells_ingested: usize,
-    corrections_ingested: usize,
-    imported_sessions_total: usize,
-    imported_shell_executions_total: usize,
-    checkpoint_count: usize,
-    journal_event_count: usize,
-    latest_import_completed_at: Option<String>,
-    latest_import_freshness: String,
-    raw_coverage_mode: String,
-    source_health: Vec<MemoryOsDoctorCorpusSource>,
+pub struct MemoryOsDoctorCorpus {
+    pub onboarding_status: String,
+    pub onboarding_completed_at: Option<String>,
+    pub sessions_processed: usize,
+    pub shells_ingested: usize,
+    pub corrections_ingested: usize,
+    pub imported_sessions_total: usize,
+    pub imported_shell_executions_total: usize,
+    pub checkpoint_count: usize,
+    pub journal_event_count: usize,
+    pub latest_import_completed_at: Option<String>,
+    pub latest_import_freshness: String,
+    pub raw_coverage_mode: String,
+    pub source_health: Vec<MemoryOsDoctorCorpusSource>,
 }
 
 #[derive(Debug, Clone, Serialize)]
-struct MemoryOsDoctorCheck {
-    name: String,
-    status: String,
-    summary: String,
-    evidence: Vec<String>,
+pub struct MemoryOsDoctorCheck {
+    pub name: String,
+    pub status: String,
+    pub summary: String,
+    pub evidence: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
-struct MemoryOsDoctorProblem {
-    severity: String,
-    title: String,
-    summary: String,
-    permanent_fix: String,
-    evidence: Vec<String>,
+pub struct MemoryOsDoctorProblem {
+    pub severity: String,
+    pub title: String,
+    pub summary: String,
+    pub permanent_fix: String,
+    pub evidence: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
-struct MemoryOsDoctorReport {
-    schema_version: String,
-    generated_at: String,
-    scope: MemoryOsInspectionScope,
-    overall_status: String,
-    corpus: MemoryOsDoctorCorpus,
-    signal_quality: Vec<MemoryOsDoctorCheck>,
-    top_pipeline_problems: Vec<MemoryOsDoctorProblem>,
-    recommended_permanent_fix: String,
+pub struct MemoryOsDoctorReport {
+    pub schema_version: String,
+    pub generated_at: String,
+    pub scope: MemoryOsInspectionScope,
+    pub overall_status: String,
+    pub corpus: MemoryOsDoctorCorpus,
+    pub signal_quality: Vec<MemoryOsDoctorCheck>,
+    pub top_pipeline_problems: Vec<MemoryOsDoctorProblem>,
+    pub recommended_permanent_fix: String,
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -1510,7 +1510,7 @@ fn build_inspect_report(
     })
 }
 
-fn build_doctor_report(
+pub fn build_doctor_report(
     tracker: &Tracker,
     scope: MemoryOsInspectionScope,
     _project_path: Option<&str>,
@@ -1522,7 +1522,7 @@ fn build_doctor_report(
         .get_memory_os_promotion_report()
         .context("Failed to load Memory OS promotion for doctor")?;
     let strategy_scope = doctor_strategy_scope();
-    let strategy_inspect = strategy::inspect(&strategy::StrategyReadOptions {
+    let strategy_inspect = strategy::inspect_read_only(&strategy::StrategyReadOptions {
         scope: strategy_scope.clone(),
     });
     let strategy_metrics = match &strategy_inspect {

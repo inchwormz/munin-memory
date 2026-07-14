@@ -607,6 +607,17 @@ pub fn inspect(options: &StrategyReadOptions) -> Result<StrategyInspectReport> {
     })
 }
 
+/// Inspect strategy without repairing or rehydrating any persisted state.
+pub fn inspect_read_only(options: &StrategyReadOptions) -> Result<StrategyInspectReport> {
+    let (_, registry, kernel) = load_scope_bundle_read_only(options.scope.as_str())?;
+    Ok(StrategyInspectReport {
+        generated_at: Utc::now().to_rfc3339(),
+        scope_id: options.scope.clone(),
+        registry,
+        kernel,
+    })
+}
+
 pub fn default_strategy_scope_hint() -> String {
     if let Ok(config) = Config::load() {
         if let Some(name) = config.strategy.configured_scope_name(None) {
@@ -638,6 +649,21 @@ pub fn discover_inspect_reports(limit: usize) -> Result<Vec<StrategyInspectRepor
 
 pub fn status(options: &StrategyReadOptions) -> Result<StrategyStatusReport> {
     let (paths, registry, kernel) = load_scope_bundle(options.scope.as_str())?;
+    build_status_report(options, paths, registry, kernel)
+}
+
+/// Read strategy status without repairing or rehydrating persisted state.
+pub fn status_read_only(options: &StrategyReadOptions) -> Result<StrategyStatusReport> {
+    let (paths, registry, kernel) = load_scope_bundle_read_only(options.scope.as_str())?;
+    build_status_report(options, paths, registry, kernel)
+}
+
+fn build_status_report(
+    options: &StrategyReadOptions,
+    paths: StrategyStorePaths,
+    registry: StrategySourceRegistry,
+    kernel: StrategyKernel,
+) -> Result<StrategyStatusReport> {
     let mut metrics = load_metrics_snapshot(&paths.metrics_path)?;
     hydrate_metric_slots_from_kernel(&mut metrics, &kernel);
     let continuity = load_continuity_snapshot(registry.continuity_project_path.as_deref())?;
@@ -954,6 +980,19 @@ fn import_strategy_kernel(scope_id: &str, artifact_path: &Path) -> Result<Strate
 fn load_scope_bundle(
     requested_scope: &str,
 ) -> Result<(StrategyStorePaths, StrategySourceRegistry, StrategyKernel)> {
+    load_scope_bundle_with_policy(requested_scope, true)
+}
+
+fn load_scope_bundle_read_only(
+    requested_scope: &str,
+) -> Result<(StrategyStorePaths, StrategySourceRegistry, StrategyKernel)> {
+    load_scope_bundle_with_policy(requested_scope, false)
+}
+
+fn load_scope_bundle_with_policy(
+    requested_scope: &str,
+    rehydrate_empty_kernel: bool,
+) -> Result<(StrategyStorePaths, StrategySourceRegistry, StrategyKernel)> {
     let config = Config::load().context("Failed to load config.toml")?;
     let scope_name = config.strategy.resolve_scope_name(Some(requested_scope));
     let paths = if let Some((_, scope_config)) = config.strategy.scope(Some(&scope_name)) {
@@ -973,7 +1012,10 @@ fn load_scope_bundle(
     if registry_path.exists() && kernel_path.exists() {
         let registry = load_registry(&registry_path)?;
         let mut kernel = load_kernel(&kernel_path)?;
-        if strategy_kernel_is_empty(&kernel) && registry.artifact_path.exists() {
+        if rehydrate_empty_kernel
+            && strategy_kernel_is_empty(&kernel)
+            && registry.artifact_path.exists()
+        {
             kernel = import_strategy_kernel(&registry.scope_id, &registry.artifact_path)?;
             save_kernel(&kernel_path, &kernel)?;
         }
