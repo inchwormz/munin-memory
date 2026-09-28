@@ -488,7 +488,7 @@ pub fn normalize_windows_path_string(path: &str) -> String {
     path.strip_prefix(r"\\?\").unwrap_or(path).to_string()
 }
 
-fn has_project_marker(path: &Path) -> bool {
+pub fn has_project_marker(path: &Path) -> bool {
     [
         ".git",
         ".context",
@@ -558,10 +558,12 @@ mod tests {
         let chat = home.join("Documents").join("Codex").join("go");
         std::fs::create_dir_all(&chat).expect("chat directory");
         assert_eq!(detect_project_root_with_home(&chat, Some(home)), chat);
+        assert!(!has_project_marker(&chat));
 
         let repo = home.join("Projects").join("repo");
         std::fs::create_dir_all(repo.join("src")).expect("repo directory");
         std::fs::create_dir(repo.join(".git")).expect("git marker");
+        assert!(has_project_marker(&repo));
         assert_eq!(
             detect_project_root_with_home(&repo.join("src"), Some(home)),
             repo

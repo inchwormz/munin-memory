@@ -134,7 +134,7 @@ $claudePlugins = Invoke-Checked "Claude plugin list" { claude plugin list --json
 $claudeDetails = Invoke-Checked "Claude plugin details" { claude plugin details munin-memory@munin-memory }
 foreach ($nativeList in @($codexPlugins, $claudePlugins)) {
     Assert-Contains $nativeList "munin-memory@munin-memory" "native plugin list"
-    Assert-Contains $nativeList "0.6.0-rc.1" "native plugin version"
+    Assert-Contains $nativeList "0.6.0-rc.2" "native plugin version"
     Assert-Contains $nativeList '"enabled": true' "native plugin enabled state"
 }
 Assert-Contains $claudeDetails "Skills" "Claude component inventory"
@@ -199,7 +199,7 @@ Write-Output "[PASS] Native plugin lifecycle"
 Write-Output "  Munin: $muninPath"
 Write-Output "  Codex: $codexVersion"
 Write-Output "  Claude: $claudeVersion"
-Write-Output "  Identity: munin-memory@munin-memory 0.6.0-rc.1"
+Write-Output "  Identity: munin-memory@munin-memory 0.6.0-rc.2"
 Write-Output "  Hosts verified: 2"
 Write-Output "  Forced rollback exit: $rollbackExit"
 Write-Output "  Session-start latency: $($stopwatch.ElapsedMilliseconds) ms"

@@ -1,8 +1,8 @@
 //! Automatic first-run session backfill into Memory OS.
 
 use crate::analytics::session_impact_cmd::{
-    file_modified_since, load_sessions_modified_since, project_roots_for_session_discovery,
-    session_home_dir, CommandOutcome, SessionRecord,
+    file_modified_since, load_recent_codex_semantic_sessions, load_sessions_modified_since,
+    project_roots_for_session_discovery, session_home_dir, CommandOutcome, SessionRecord,
 };
 use crate::core::memory_os::{
     MemoryOsAction, MemoryOsActionCue, MemoryOsCheckpointCapture, MemoryOsCheckpointReentry,
@@ -182,24 +182,27 @@ fn ensure_memory_os_session_backfill_internal(
         state.started_at = Some(Utc::now().to_rfc3339());
     }
 
-    let processed: HashSet<String> = state.processed_session_ids.iter().cloned().collect();
+    let mut processed: HashSet<String> = state.processed_session_ids.iter().cloned().collect();
+    let bootstrap_recent = state.sessions_processed == 0;
     let scan_started_at = Utc::now();
     let modified_since = state
         .last_checked_at
         .as_deref()
         .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
         .map(|value| SystemTime::from(value.with_timezone(&Utc) - chrono::Duration::seconds(60)));
-    let sessions = load_onboarding_sessions(modified_since)?;
     let tracker =
         Tracker::new().context("Failed to initialize tracking database for session onboarding")?;
     let mut sessions_processed_this_run = 0usize;
     let mut shells_ingested_this_run = 0usize;
     let mut corrections_ingested_this_run = 0usize;
 
-    for session in sessions {
+    let mut import_session = |session: SessionRecord| -> Result<()> {
+        if session.is_subagent {
+            return Ok(());
+        }
         let processed_key = processed_session_key(&session);
-        if processed.contains(&processed_key) {
-            continue;
+        if !processed.insert(processed_key.clone()) {
+            return Ok(());
         }
 
         replay_session(&tracker, &session)?;
@@ -215,7 +218,20 @@ fn ensure_memory_os_session_backfill_internal(
         state.shells_ingested += session.shells.len();
         state.corrections_ingested += session_correction_occurrences(&session).len();
         save_state(&state)?;
+        Ok(())
+    };
+
+    if bootstrap_recent {
+        let cutoff = SystemTime::now() - Duration::from_secs(60 * 60 * 24 * 60);
+        for session in load_recent_codex_semantic_sessions(cutoff, 120)? {
+            import_session(session)?;
+        }
     }
+
+    for session in load_onboarding_sessions(modified_since)? {
+        import_session(session)?;
+    }
+    drop(import_session);
 
     let completed_at = Utc::now().to_rfc3339();
     state.completed_at = Some(completed_at.clone());
@@ -286,12 +302,17 @@ fn load_onboarding_sessions(modified_since: Option<SystemTime>) -> Result<Vec<Se
     }
 
     let mut merged = by_id.into_values().collect::<Vec<_>>();
-    merged.sort_by(|left, right| {
-        left.started_at
-            .cmp(&right.started_at)
+    sort_sessions_newest_first(&mut merged);
+    Ok(merged)
+}
+
+fn sort_sessions_newest_first(sessions: &mut [SessionRecord]) {
+    sessions.sort_by(|left, right| {
+        right
+            .started_at
+            .cmp(&left.started_at)
             .then_with(|| left.session_id.cmp(&right.session_id))
     });
-    Ok(merged)
 }
 
 fn source_bias(source: crate::analytics::session_impact_cmd::SessionSource) -> usize {
@@ -512,6 +533,7 @@ fn parse_recall_session(path: &std::path::Path) -> Result<Option<SessionRecord>>
         started_at: recall_session_timestamp(date.as_deref()),
         user_prompts,
         assistant_outcome: None,
+        is_subagent: false,
         shells: Vec::new(),
     }))
 }
@@ -598,8 +620,11 @@ fn session_checkpoint_capture(session: &SessionRecord) -> MemoryOsCheckpointCapt
 
     let last_prompt = session
         .user_prompts
-        .last()
-        .map(|prompt| prompt.text.clone());
+        .iter()
+        .rev()
+        .map(|prompt| prompt.text.trim())
+        .find(|text| !semantic_text_is_noise(text))
+        .map(str::to_string);
     if let Some(prompt) = last_prompt
         .as_deref()
         .map(str::trim)
@@ -1134,6 +1159,10 @@ fn semantic_text_is_noise(text: &str) -> bool {
         return true;
     }
     let starts = [
+        "# agents.md instructions",
+        "# claude.md instructions",
+        "<instructions>",
+        "<environment_context>",
         "read c:\\",
         "read c:/",
         "read .omx",
@@ -1534,6 +1563,7 @@ mod tests {
                 text: "Fix the CLI flow".to_string(),
             }],
             assistant_outcome: None,
+            is_subagent: false,
             shells: vec![
                 ShellExecution {
                     timestamp: DateTime::parse_from_rfc3339("2026-04-10T00:00:01Z")
@@ -1553,6 +1583,36 @@ mod tests {
                 },
             ],
         }
+    }
+
+    #[test]
+    fn onboarding_imports_fresh_sessions_before_old_history() {
+        let old = sample_session();
+        let mut recent = old.clone();
+        recent.session_id = "recent".to_string();
+        recent.started_at = Utc::now();
+        let mut sessions = vec![old, recent];
+        sort_sessions_newest_first(&mut sessions);
+        assert_eq!(sessions[0].session_id, "recent");
+    }
+
+    #[test]
+    fn pasted_agent_instructions_do_not_become_a_goal() {
+        let mut session = sample_session();
+        session
+            .user_prompts
+            .push(crate::analytics::session_impact_cmd::UserPrompt {
+            timestamp: Utc::now(),
+            text:
+                "# AGENTS.md instructions\n\n<INSTRUCTIONS>\nDo not change files.\n</INSTRUCTIONS>"
+                    .to_string(),
+        });
+        let capture = session_checkpoint_capture(&session);
+        assert_eq!(capture.goal.as_deref(), Some("Fix the CLI flow"));
+        assert!(capture
+            .selected_items
+            .iter()
+            .all(|item| !item.summary.contains("Do not change files")));
     }
 
     #[test]

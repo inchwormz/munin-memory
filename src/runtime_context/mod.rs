@@ -464,8 +464,16 @@ pub fn build_current_resume_packet(scope: &str) -> Result<RuntimeContextPacketV1
     let onboarding = tracker.get_memory_os_onboarding_state_fast()?;
     let project_path = crate::core::utils::current_project_root_string();
     let preferences = tracker.get_memory_os_user_preferences_fast(&project_path)?;
-    let last_request = tracker.get_memory_os_recent_project_request_fast(&project_path)?;
-    let last_outcome = tracker.get_memory_os_recent_project_outcome_fast(&project_path)?;
+    let project_is_identified =
+        crate::core::utils::has_project_marker(std::path::Path::new(&project_path));
+    let (last_request, last_outcome) = if project_is_identified {
+        (
+            tracker.get_memory_os_recent_project_request_fast(&project_path)?,
+            tracker.get_memory_os_recent_project_outcome_fast(&project_path)?,
+        )
+    } else {
+        (None, None)
+    };
     Ok(packet_from_startup_bootstrap(
         scope,
         Utc::now().to_rfc3339(),

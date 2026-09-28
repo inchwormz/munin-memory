@@ -158,11 +158,11 @@ if "%1 %2 %3"=="plugin marketplace list" (
   exit /b 0
 )
 if "%1 %2"=="plugin list" (
-  if exist "%FAKE_HOST_STATE%\codex-plugin" (echo {"installed":[{"pluginId":"munin-memory@munin-memory","version":"0.6.0-rc.1","installed":true,"enabled":true}],"available":[]}) else (echo {"installed":[],"available":[]})
+  if exist "%FAKE_HOST_STATE%\codex-plugin" (echo {"installed":[{"pluginId":"munin-memory@munin-memory","version":"0.6.0-rc.2","installed":true,"enabled":true}],"available":[]}) else (echo {"installed":[],"available":[]})
   exit /b 0
 )
 if "%1 %2 %3"=="plugin marketplace add" (copy /Y NUL "%FAKE_HOST_STATE%\codex-marketplace" >NUL & echo {"name":"munin-memory"} & exit /b 0)
-if "%1 %2"=="plugin add" (copy /Y NUL "%FAKE_HOST_STATE%\codex-plugin" >NUL & echo {"pluginId":"munin-memory@munin-memory","version":"0.6.0-rc.1"} & exit /b 0)
+if "%1 %2"=="plugin add" (copy /Y NUL "%FAKE_HOST_STATE%\codex-plugin" >NUL & echo {"pluginId":"munin-memory@munin-memory","version":"0.6.0-rc.2"} & exit /b 0)
 if "%1 %2"=="plugin remove" (if exist "%FAKE_HOST_STATE%\codex-plugin" del "%FAKE_HOST_STATE%\codex-plugin" & echo {"removed":true} & exit /b 0)
 if "%1 %2 %3"=="plugin marketplace remove" (if exist "%FAKE_HOST_STATE%\codex-marketplace" del "%FAKE_HOST_STATE%\codex-marketplace" & echo {"removed":true} & exit /b 0)
 echo unexpected codex arguments: %* 1>&2
@@ -179,7 +179,7 @@ if "%1 %2 %3"=="plugin marketplace list" (
   exit /b 0
 )
 if "%1 %2"=="plugin list" (
-  if exist "%FAKE_HOST_STATE%\claude-plugin" (echo [{"id":"munin-memory@munin-memory","version":"0.6.0-rc.1","scope":"user","enabled":true}]) else (echo [])
+  if exist "%FAKE_HOST_STATE%\claude-plugin" (echo [{"id":"munin-memory@munin-memory","version":"0.6.0-rc.2","scope":"user","enabled":true}]) else (echo [])
   exit /b 0
 )
 if "%1 %2"=="plugin validate" (echo Validation passed & exit /b 0)
@@ -210,9 +210,9 @@ printf '%s\n' "$*" >> "$FAKE_HOST_STATE/codex.log"
 if [ "$1 $2 $3" = "plugin marketplace list" ]; then
   if [ -f "$FAKE_HOST_STATE/codex-marketplace" ]; then printf '%s\n' '{"marketplaces":[{"name":"munin-memory","root":"fake"}]}'; else printf '%s\n' '{"marketplaces":[]}'; fi
 elif [ "$1 $2" = "plugin list" ]; then
-  if [ -f "$FAKE_HOST_STATE/codex-plugin" ]; then printf '%s\n' '{"installed":[{"pluginId":"munin-memory@munin-memory","version":"0.6.0-rc.1","installed":true,"enabled":true}],"available":[]}'; else printf '%s\n' '{"installed":[],"available":[]}'; fi
+  if [ -f "$FAKE_HOST_STATE/codex-plugin" ]; then printf '%s\n' '{"installed":[{"pluginId":"munin-memory@munin-memory","version":"0.6.0-rc.2","installed":true,"enabled":true}],"available":[]}'; else printf '%s\n' '{"installed":[],"available":[]}'; fi
 elif [ "$1 $2 $3" = "plugin marketplace add" ]; then touch "$FAKE_HOST_STATE/codex-marketplace"; printf '%s\n' '{"name":"munin-memory"}'
-elif [ "$1 $2" = "plugin add" ]; then touch "$FAKE_HOST_STATE/codex-plugin"; printf '%s\n' '{"pluginId":"munin-memory@munin-memory","version":"0.6.0-rc.1"}'
+elif [ "$1 $2" = "plugin add" ]; then touch "$FAKE_HOST_STATE/codex-plugin"; printf '%s\n' '{"pluginId":"munin-memory@munin-memory","version":"0.6.0-rc.2"}'
 elif [ "$1 $2" = "plugin remove" ]; then rm -f "$FAKE_HOST_STATE/codex-plugin"; printf '%s\n' '{"removed":true}'
 elif [ "$1 $2 $3" = "plugin marketplace remove" ]; then rm -f "$FAKE_HOST_STATE/codex-marketplace"; printf '%s\n' '{"removed":true}'
 else printf 'unexpected codex arguments: %s\n' "$*" >&2; exit 9
@@ -227,7 +227,7 @@ printf '%s\n' "$*" >> "$FAKE_HOST_STATE/claude.log"
 if [ "$1 $2 $3" = "plugin marketplace list" ]; then
   if [ -f "$FAKE_HOST_STATE/claude-marketplace" ]; then printf '%s\n' '[{"name":"munin-memory","source":"directory","path":"fake"}]'; else printf '%s\n' '[]'; fi
 elif [ "$1 $2" = "plugin list" ]; then
-  if [ -f "$FAKE_HOST_STATE/claude-plugin" ]; then printf '%s\n' '[{"id":"munin-memory@munin-memory","version":"0.6.0-rc.1","scope":"user","enabled":true}]'; else printf '%s\n' '[]'; fi
+  if [ -f "$FAKE_HOST_STATE/claude-plugin" ]; then printf '%s\n' '[{"id":"munin-memory@munin-memory","version":"0.6.0-rc.2","scope":"user","enabled":true}]'; else printf '%s\n' '[]'; fi
 elif [ "$1 $2" = "plugin validate" ]; then printf '%s\n' 'Validation passed'
 elif [ "$1 $2 $3" = "plugin marketplace add" ]; then touch "$FAKE_HOST_STATE/claude-marketplace"; printf '%s\n' 'Marketplace added'
 elif [ "$1 $2" = "plugin install" ]; then
@@ -398,7 +398,7 @@ fn migration_preserves_unrelated_state_and_backs_up_munin_files() {
     write_profile_file(
         profile.path(),
         ".codex/plugins/munin-memory/.codex-plugin/plugin.json",
-        r#"{"name":"munin-memory","version":"0.6.0-rc.1"}"#,
+        r#"{"name":"munin-memory","version":"0.6.0-rc.2"}"#,
     );
     write_profile_file(
         profile.path(),

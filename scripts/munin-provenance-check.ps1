@@ -109,8 +109,8 @@ $problems = New-Object System.Collections.Generic.List[string]
 if (-not $versionsMatch) {
     $problems.Add("version surfaces differ or a binary/MCP probe failed")
 }
-if ($RequireCandidate -and $cargoVersion -ne "0.6.0-rc.1") {
-    $problems.Add("candidate version must be 0.6.0-rc.1")
+if ($RequireCandidate -and $cargoVersion -ne "0.6.0-rc.2") {
+    $problems.Add("candidate version must be 0.6.0-rc.2")
 }
 if ($RequireCandidate -and $tags.Count -ne 0) {
     $problems.Add("candidate tag already exists; tag creation is an approval boundary")

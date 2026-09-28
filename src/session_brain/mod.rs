@@ -2,7 +2,7 @@ mod build;
 mod evidence;
 mod guidance;
 mod messages;
-mod project;
+pub(crate) mod project;
 mod strategy;
 mod types;
 mod user;
@@ -193,16 +193,51 @@ fn render_prompt(brain: &SessionBrain) -> String {
         brain.meta.built_at,
         brain.meta.source_status
     )];
-    if brain.meta.source_status != "live" && brain.meta.source_status != "none" {
-        lines.push(format!(
-            "- freshness warning: reading {} context, not the live window",
-            brain.meta.source_status
-        ));
-    }
-
     lines.push("<agenda>".to_string());
     if let Some(goal) = brain.agenda.current_goal.as_deref() {
         lines.push(format!("- current ask: {}", goal));
+    }
+    if let Some(latest) = brain
+        .messages
+        .user
+        .last()
+        .map(|message| message.text.trim())
+    {
+        if !latest.is_empty()
+            && !brain
+                .agenda
+                .current_goal
+                .as_deref()
+                .is_some_and(|goal| latest == goal || latest.ends_with(goal))
+        {
+            lines.push(format!(
+                "- latest user direction: {}",
+                truncate(latest, 700)
+            ));
+        }
+    }
+    if let Some(previous) = brain
+        .messages
+        .user
+        .iter()
+        .rev()
+        .skip(1)
+        .map(|message| message.text.trim())
+        .find(|text| {
+            text.len() >= 30
+                && !text.starts_with('#')
+                && !text.starts_with('<')
+                && !brain
+                    .agenda
+                    .current_goal
+                    .as_deref()
+                    .is_some_and(|goal| goal.contains(text) || text.ends_with(goal))
+        })
+    {
+        lines.push(format!(
+            "- recent user requirement: {}",
+            truncate(previous, 500)
+        ));
     }
     for subgoal in brain.agenda.subgoals.iter().take(4) {
         lines.push(format!("- subgoal: {}", subgoal));
@@ -215,6 +250,7 @@ fn render_prompt(brain: &SessionBrain) -> String {
     }
     lines.push("</agenda>".to_string());
 
+    let state_start = lines.len();
     lines.push("<state>".to_string());
     for signal in brain.state.decisions.iter().take(3) {
         lines.push(format!("- decision: {}", signal.summary));
@@ -231,14 +267,18 @@ fn render_prompt(brain: &SessionBrain) -> String {
     for signal in brain.state.rejected_options.iter().take(2) {
         lines.push(format!("- rejected: {}", signal.summary));
     }
-    lines.push("</state>".to_string());
+    if lines.len() == state_start + 1 {
+        lines.pop();
+    } else {
+        lines.push("</state>".to_string());
+    }
 
+    let project_start = lines.len();
     lines.push("<project>".to_string());
     for line in brain.project.summary.iter().take(5) {
-        lines.push(format!("- {}", line));
-    }
-    for path in brain.project.key_files.iter().take(6) {
-        lines.push(format!("- key file: {}", path));
+        if !line.starts_with("Active ask:") {
+            lines.push(format!("- {}", line));
+        }
     }
     if !brain.project.priority_notes.is_empty() {
         lines.push(format!(
@@ -246,22 +286,21 @@ fn render_prompt(brain: &SessionBrain) -> String {
             truncate(&brain.project.priority_notes, 220)
         ));
     }
-    lines.push(format!(
-        "- codebase map: {}",
-        truncate(&brain.project.codebase_map.replace('\n', " | "), 260)
-    ));
-    lines.push("</project>".to_string());
-
-    lines.push("<strategy>".to_string());
-    if brain.strategy.summary.is_empty() {
-        lines.push("- no active strategy artifact matched this project".to_string());
+    if lines.len() == project_start + 1 {
+        lines.pop();
     } else {
+        lines.push("</project>".to_string());
+    }
+
+    if !brain.strategy.summary.is_empty() {
+        lines.push("<strategy>".to_string());
         for line in brain.strategy.summary.iter().take(5) {
             lines.push(format!("- {}", line));
         }
+        lines.push("</strategy>".to_string());
     }
-    lines.push("</strategy>".to_string());
 
+    let user_start = lines.len();
     lines.push("<user_operating_model>".to_string());
     if !brain.user.brief.is_empty() {
         lines.push(format!("- brief: {}", brain.user.brief));
@@ -272,19 +311,11 @@ fn render_prompt(brain: &SessionBrain) -> String {
     if !brain.user.profile.is_empty() {
         lines.push(format!("- profile: {}", brain.user.profile));
     }
-    if !brain.user.friction.is_empty() {
-        lines.push(format!("- friction: {}", brain.user.friction));
+    if lines.len() == user_start + 1 {
+        lines.pop();
+    } else {
+        lines.push("</user_operating_model>".to_string());
     }
-    lines.push("</user_operating_model>".to_string());
-
-    lines.push("<guidance>".to_string());
-    for hint in brain.guidance.retrieval_hints.iter().take(4) {
-        lines.push(format!("- retrieval hint: {}", hint));
-    }
-    for avoid in brain.guidance.avoid.iter().take(4) {
-        lines.push(format!("- avoid: {}", avoid));
-    }
-    lines.push("</guidance>".to_string());
 
     lines.push("</session_brain>".to_string());
     lines.join("\n")
@@ -408,7 +439,7 @@ mod tests {
     }
 
     #[test]
-    fn prompt_renderer_uses_compiled_sections_without_raw_messages() {
+    fn prompt_renderer_keeps_latest_direction_without_dumping_transcript() {
         let rendered = render_prompt(&sample_brain());
 
         assert!(rendered.contains("- current ask: Fix session brain semantics"));
@@ -416,9 +447,32 @@ mod tests {
         assert!(rendered.contains("<strategy>"));
         assert!(rendered.contains("<user_operating_model>"));
         assert!(!rendered.contains("<messages>"));
-        assert!(!rendered.contains("user message"));
+        assert!(rendered.contains("latest user direction: user message 7"));
+        assert!(!rendered.contains("user message 0"));
         assert!(!rendered.contains("assistant message"));
         assert!(!rendered.contains("C:/repo/session.jsonl"));
+        assert!(!rendered.contains("<guidance>"));
+    }
+
+    #[test]
+    fn prompt_renderer_retains_recent_requirement_before_a_deadline() {
+        let mut brain = sample_brain();
+        let template = brain.messages.user[0].clone();
+        brain.messages.user = [
+            "# AGENTS.md instructions\n<INSTRUCTIONS>Ignore this as a goal</INSTRUCTIONS>",
+            "Keep the remembered context fresh and remove old frustrations.",
+            "Please finish this work within 45 minutes.",
+        ]
+        .into_iter()
+        .map(|text| SessionBrainMessage {
+            text: text.to_string(),
+            ..template.clone()
+        })
+        .collect();
+        let rendered = render_prompt(&brain);
+        assert!(rendered.contains("latest user direction: Please finish"));
+        assert!(rendered.contains("recent user requirement: Keep the remembered context fresh"));
+        assert!(!rendered.contains("AGENTS.md instructions"));
     }
 
     #[test]

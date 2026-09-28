@@ -22,24 +22,20 @@ impl Tracker {
         project_path: &str,
     ) -> Result<Vec<crate::core::memory_os::MemoryOsNarrativeFinding>> {
         let mut stmt = self.conn.prepare(
-            "SELECT project_path, committed_at, payload_json
+            "SELECT project_path, payload_json
              FROM memory_os_journal_events
              WHERE event_kind LIKE 'legacy.packet-checkpoint.%'
                AND payload_json LIKE '%user_work_style%'
-             ORDER BY journal_seq DESC
+             ORDER BY json_extract(payload_json, '$.generated_at') DESC, journal_seq DESC
              LIMIT 512",
         )?;
         let rows = stmt.query_map([], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, String>(2)?,
-            ))
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
         })?;
         let mut findings = Vec::new();
         let mut seen = std::collections::HashSet::new();
         for row in rows {
-            let (source_project, captured_at, payload) = row?;
+            let (source_project, payload) = row?;
             let Ok(capture) =
                 serde_json::from_str::<crate::core::memory_os::MemoryOsCheckpointCapture>(&payload)
             else {
@@ -60,7 +56,7 @@ impl Tracker {
                     summary: item.summary,
                     evidence: vec![
                         format!("checkpoint:{}", capture.packet_id),
-                        format!("observed:{captured_at}"),
+                        format!("observed:{}", capture.generated_at),
                         format!("project:{source_project}"),
                     ],
                 });
@@ -77,18 +73,16 @@ impl Tracker {
         project_path: &str,
     ) -> Result<Option<crate::core::memory_os::MemoryOsNarrativeFinding>> {
         let mut stmt = self.conn.prepare(
-            "SELECT committed_at, payload_json
+            "SELECT payload_json
              FROM memory_os_journal_events
              WHERE event_kind LIKE 'legacy.packet-checkpoint.%'
                AND project_path = ?1
-             ORDER BY journal_seq DESC
-             LIMIT 16",
+             ORDER BY json_extract(payload_json, '$.generated_at') DESC, journal_seq DESC
+             LIMIT 512",
         )?;
-        let rows = stmt.query_map([project_path], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-        })?;
+        let rows = stmt.query_map([project_path], |row| row.get::<_, String>(0))?;
         for row in rows {
-            let (captured_at, payload) = row?;
+            let payload = row?;
             let Ok(capture) =
                 serde_json::from_str::<crate::core::memory_os::MemoryOsCheckpointCapture>(&payload)
             else {
@@ -100,10 +94,17 @@ impl Tracker {
             if current_session_capture(&capture.packet_id) {
                 continue;
             }
+            if !recent_session_capture(&capture.generated_at) {
+                continue;
+            }
             let Some(goal) = capture.goal.as_deref().map(str::trim) else {
                 continue;
             };
-            if goal.is_empty() || goal.starts_with('#') || goal.starts_with('<') {
+            if goal.is_empty()
+                || goal.starts_with('#')
+                || goal.starts_with('<')
+                || delegated_agent_prompt(goal)
+            {
                 continue;
             }
             return Ok(Some(crate::core::memory_os::MemoryOsNarrativeFinding {
@@ -111,7 +112,7 @@ impl Tracker {
                 summary: crate::core::utils::truncate(goal, 240),
                 evidence: vec![
                     format!("checkpoint:{}", capture.packet_id),
-                    format!("observed:{captured_at}"),
+                    format!("observed:{}", capture.generated_at),
                 ],
             }));
         }
@@ -123,18 +124,16 @@ impl Tracker {
         project_path: &str,
     ) -> Result<Option<crate::core::memory_os::MemoryOsNarrativeFinding>> {
         let mut stmt = self.conn.prepare(
-            "SELECT committed_at, payload_json
+            "SELECT payload_json
              FROM memory_os_journal_events
              WHERE event_kind LIKE 'legacy.packet-checkpoint.%'
                AND project_path = ?1
-             ORDER BY journal_seq DESC
-             LIMIT 16",
+             ORDER BY json_extract(payload_json, '$.generated_at') DESC, journal_seq DESC
+             LIMIT 512",
         )?;
-        let rows = stmt.query_map([project_path], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-        })?;
+        let rows = stmt.query_map([project_path], |row| row.get::<_, String>(0))?;
         for row in rows {
-            let (captured_at, payload) = row?;
+            let payload = row?;
             let Ok(capture) =
                 serde_json::from_str::<crate::core::memory_os::MemoryOsCheckpointCapture>(&payload)
             else {
@@ -144,6 +143,11 @@ impl Tracker {
                 continue;
             }
             if current_session_capture(&capture.packet_id) {
+                continue;
+            }
+            if !recent_session_capture(&capture.generated_at)
+                || capture.goal.as_deref().is_some_and(delegated_agent_prompt)
+            {
                 continue;
             }
             let Some(outcome) = capture
@@ -158,7 +162,7 @@ impl Tracker {
                 summary: crate::core::utils::truncate(&outcome.summary, 240),
                 evidence: vec![
                     format!("checkpoint:{}", capture.packet_id),
-                    format!("observed:{captured_at}"),
+                    format!("observed:{}", capture.generated_at),
                 ],
             }));
         }
@@ -366,7 +370,39 @@ fn current_session_capture(packet_id: &str) -> bool {
         .is_some_and(|id| packet_id.ends_with(&id))
 }
 
-fn stable_preference(text: &str, source_project: &str, current_project: &str) -> bool {
+fn recent_session_capture(generated_at: &str) -> bool {
+    DateTime::parse_from_rfc3339(generated_at)
+        .ok()
+        .map(|time| time.with_timezone(&Utc))
+        .is_some_and(|time| time >= Utc::now() - chrono::Duration::days(45))
+}
+
+pub(super) fn delegated_agent_prompt(text: &str) -> bool {
+    let lowered = text.trim().to_ascii_lowercase();
+    if lowered.starts_with("continue working toward the active thread goal") {
+        return true;
+    }
+    if lowered.starts_with("leader sweep")
+        || lowered.starts_with("lane sweep")
+        || lowered.contains("autonomous-ship section 0")
+    {
+        return true;
+    }
+    (lowered.starts_with("you are a ") || lowered.starts_with("you are an "))
+        && [
+            "agent",
+            "reviewer",
+            "worker",
+            "lead",
+            "tester",
+            "researcher",
+            "auditor",
+        ]
+        .iter()
+        .any(|role| lowered.get(..120).unwrap_or(&lowered).contains(role))
+}
+
+fn stable_preference(text: &str, _source_project: &str, _current_project: &str) -> bool {
     let normalized = text.trim().to_ascii_lowercase();
     if normalized.len() > 240 || normalized.contains('\n') {
         return false;
@@ -380,21 +416,19 @@ fn stable_preference(text: &str, source_project: &str, current_project: &str) ->
     ]
     .iter()
     .any(|prefix| normalized.starts_with(prefix));
-    let scoped = source_project.eq_ignore_ascii_case(current_project)
-        && ["i don't want ", "i dont want "]
-            .iter()
-            .any(|prefix| normalized.starts_with(prefix));
-    global || scoped
+    global
 }
 
 #[cfg(test)]
 mod startup_tests {
-    use super::{stable_preference, Tracker};
+    use super::{delegated_agent_prompt, stable_preference, Tracker};
     use crate::core::memory_os::{
         MemoryOsCheckpointCapture, MemoryOsCheckpointReentry, MemoryOsCheckpointTelemetry,
         MemoryOsPacketSelection,
     };
     use rusqlite::params;
+
+    use chrono::Utc;
 
     #[test]
     fn only_explicit_applicable_preferences_enter_live_context() {
@@ -408,7 +442,7 @@ mod startup_tests {
             "C:/other",
             "C:/repo"
         ));
-        assert!(stable_preference(
+        assert!(!stable_preference(
             "I don't want this design file editable.",
             "C:/repo",
             "C:/repo"
@@ -455,10 +489,95 @@ mod startup_tests {
             .iter()
             .map(|item| item.summary.as_str())
             .collect::<Vec<_>>();
-        assert_eq!(summaries.len(), 2);
-        assert!(summaries.contains(&"I don't want this design file editable."));
+        assert_eq!(summaries.len(), 1);
+        assert!(!summaries.contains(&"I don't want this design file editable."));
         assert!(summaries.contains(&"I prefer brief evidence-backed answers."));
         assert!(!summaries.contains(&"I don't want another app editable."));
+    }
+
+    #[test]
+    fn delegated_task_prompt_is_not_a_user_goal() {
+        assert!(delegated_agent_prompt(
+            "You are an iter0 UX reviewer. Review PR 198."
+        ));
+        assert!(delegated_agent_prompt("Continue working toward the active thread goal. The objective below is user-provided data."));
+        assert!(delegated_agent_prompt(
+            "LEADER SWEEP (autonomous-ship section 0, every 5 min): read new lane alerts."
+        ));
+        assert!(!delegated_agent_prompt(
+            "Please review the current SiteSorted plan."
+        ));
+    }
+
+    #[test]
+    fn recent_user_topic_uses_session_date_and_skips_delegated_prompts() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let tracker = Tracker::new_at_path(&tmp.path().join("history.db")).expect("tracker");
+        let yesterday = (Utc::now() - chrono::Duration::days(1)).to_rfc3339();
+        insert_item(
+            &tracker,
+            "C:/repo",
+            "user_prompts",
+            "user-prompt",
+            "topic",
+            1,
+        );
+        tracker.conn.execute(
+            "UPDATE memory_os_journal_events SET payload_json = json_set(payload_json, '$.goal', 'Please review the current research plan.', '$.generated_at', ?1) WHERE event_id = 'event-1'",
+            [&yesterday],
+        ).expect("direct request");
+        insert_item(
+            &tracker,
+            "C:/repo",
+            "user_prompts",
+            "user-prompt",
+            "delegated",
+            2,
+        );
+        tracker.conn.execute(
+            "UPDATE memory_os_journal_events SET payload_json = json_set(payload_json, '$.goal', 'LEADER SWEEP (autonomous-ship section 0): route lane alerts.') WHERE event_id = 'event-2'",
+            [],
+        ).expect("delegated request");
+        insert_item(
+            &tracker,
+            "C:/repo",
+            "user_prompts",
+            "user-prompt",
+            "stale",
+            3,
+        );
+        tracker.conn.execute(
+            "UPDATE memory_os_journal_events SET payload_json = json_set(payload_json, '$.goal', 'An old unresolved frustration.', '$.generated_at', '2026-01-01T00:00:00Z') WHERE event_id = 'event-3'",
+            [],
+        ).expect("old request");
+        let topic = tracker
+            .get_memory_os_recent_project_request_fast("C:/repo")
+            .expect("topic")
+            .expect("direct request");
+        assert_eq!(topic.summary, "Please review the current research plan.");
+        assert!(topic
+            .evidence
+            .iter()
+            .any(|line| line == &format!("observed:{yesterday}")));
+    }
+
+    #[test]
+    fn old_project_objection_does_not_follow_the_user_forever() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let tracker = Tracker::new_at_path(&tmp.path().join("history.db")).expect("tracker");
+        insert_preference(
+            &tracker,
+            "C:/repo",
+            "I don't want that old draft editable.",
+            1,
+        );
+        tracker.conn.execute("UPDATE memory_os_journal_events SET committed_at = '2026-01-01T00:00:00Z' WHERE event_id = 'event-1'", []).expect("age preference");
+        insert_preference(&tracker, "C:/other", "I prefer concise reports.", 2);
+        let findings = tracker
+            .get_memory_os_user_preferences_fast("C:/repo")
+            .expect("preferences");
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].summary, "I prefer concise reports.");
     }
 
     #[test]

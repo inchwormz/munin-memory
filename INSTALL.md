@@ -2,7 +2,7 @@
 
 Use this repo as the Munin CLI source of truth.
 
-Repository package version: `0.6.0-rc.1` (local candidate; not released).
+Repository package version: `0.6.0-rc.2` (local candidate; not released).
 Latest GitHub release: `v0.5.13`. This checkout includes unreleased work, and
 crate publishing remains disabled until the next release is explicitly approved.
 
@@ -44,7 +44,7 @@ munin plugin install --claude
 ```
 
 The install is local/offline after the binary is present. Munin materializes
-the exact tracked bundle under `~/.munin/plugin-marketplaces/0.6.0-rc.1/`; Codex and
+the exact tracked bundle under `~/.munin/plugin-marketplaces/0.6.0-rc.2/`; Codex and
 Claude then own their normal plugin caches. Lifecycle receipts are written
 under `~/.munin/`.
 

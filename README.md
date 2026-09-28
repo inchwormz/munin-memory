@@ -12,7 +12,7 @@ tasks without sending that memory to a hosted service.
 
 Published crate: `0.5.14`.
 Latest GitHub release: `v0.5.13`.
-Local release candidate: `0.6.0-rc.1` (not tagged, pushed, published, or
+Local release candidate: `0.6.0-rc.2` (not tagged, pushed, published, or
 released). Crate publishing is disabled in this checkout until that release is
 explicitly approved.
 
@@ -198,6 +198,7 @@ Use these surfaces at the start of work or when an agent gets lost:
 
 ```powershell
 munin resume --format prompt
+munin resume --project C:\path\to\project --format prompt
 munin brain --format prompt
 munin nudge --format text
 munin recall --format text "<topic>"

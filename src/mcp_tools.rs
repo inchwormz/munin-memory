@@ -1,7 +1,7 @@
 //! Typed, read-only adapters between Munin read models and MCP tool results.
 
 use crate::analytics::memory_os_cmd;
-use crate::core::memory_os::MemoryOsInspectionScope;
+use crate::core::memory_os::{MemoryOsCheckpointProjection, MemoryOsInspectionScope};
 use crate::core::strategy::{self, StrategyReadOptions};
 use crate::core::tracking::{scan_memory_os_trust_payload, MemoryOsTrustFindingKind, Tracker};
 use anyhow::{anyhow, Context, Result};
@@ -228,14 +228,19 @@ fn project_state(input: ProjectStateInput) -> Result<Value> {
     }
     let mut checkpoints = Vec::new();
     for checkpoint in &kernel.checkpoints {
+        let Some(context) = useful_checkpoint_context(checkpoint) else {
+            continue;
+        };
         checkpoints.push((
-            json!({"kind": "checkpoint", "value": checkpoint}),
+            json!({"kind": "checkpoint", "value": context}),
             McpProvenance {
                 source_kind: "checkpoint".to_string(),
                 source_ref: checkpoint.source_event_id.clone(),
                 observed_at: Some(checkpoint.captured_at.clone()),
             },
         ));
+        // The most recent useful request is the context an agent needs here.
+        break;
     }
     let mut ranked = prioritize_project_state(open_loops, claims, checkpoints);
     let found = ranked.len();
@@ -254,6 +259,29 @@ fn project_state(input: ProjectStateInput) -> Result<Value> {
             "items": items
         }),
     )
+}
+
+fn useful_checkpoint_context(checkpoint: &MemoryOsCheckpointProjection) -> Option<Value> {
+    let goal = checkpoint.goal.as_deref()?.trim();
+    let lowered = goal.to_ascii_lowercase();
+    if goal.is_empty()
+        || goal.len() > 1000
+        || goal.starts_with('#')
+        || goal.starts_with('<')
+        || lowered.contains("<instructions>")
+        || lowered.contains("<environment_context>")
+    {
+        return None;
+    }
+    let observed = DateTime::parse_from_rfc3339(&checkpoint.captured_at).ok()?;
+    if Utc::now().signed_duration_since(observed.with_timezone(&Utc)) > chrono::Duration::days(45) {
+        return None;
+    }
+    Some(json!({
+        "checkpointId": checkpoint.checkpoint_id,
+        "capturedAt": checkpoint.captured_at,
+        "goal": crate::core::utils::truncate(goal, 320),
+    }))
 }
 
 fn prioritize_project_state(
@@ -546,6 +574,45 @@ fn redact_strings(value: &mut Value, excerpts: &[String]) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn project_context_ignores_instruction_dumps_and_old_requests() {
+        let checkpoint = |goal: &str, captured_at: String| MemoryOsCheckpointProjection {
+            checkpoint_id: "checkpoint:test".to_string(),
+            source_event_id: "event:test".to_string(),
+            journal_seq: 1,
+            captured_at,
+            preset: "resume".to_string(),
+            intent: "diagnose".to_string(),
+            goal: Some(goal.to_string()),
+            current_recommendation: None,
+            active_risks: Vec::new(),
+            open_loop_summaries: Vec::new(),
+            live_claim_summaries: Vec::new(),
+            pager_manifest_hash: String::new(),
+            reentry: crate::core::memory_os::MemoryOsCheckpointReentry {
+                recommended_command: String::new(),
+                current_recommendation: None,
+                first_question: String::new(),
+                first_verification: String::new(),
+            },
+        };
+        let today = Utc::now().to_rfc3339();
+        assert!(useful_checkpoint_context(&checkpoint(
+            "# AGENTS.md instructions\n<INSTRUCTIONS>\n...",
+            today.clone()
+        ))
+        .is_none());
+        assert!(useful_checkpoint_context(&checkpoint(
+            "That bug is still frustrating",
+            (Utc::now() - chrono::Duration::days(70)).to_rfc3339()
+        ))
+        .is_none());
+        let context = useful_checkpoint_context(&checkpoint("Build useful live memory", today))
+            .expect("current user request");
+        assert_eq!(context["goal"], "Build useful live memory");
+        assert!(context.get("reentry").is_none());
+    }
 
     #[test]
     fn current_blocker_survives_a_page_of_historical_claims() {

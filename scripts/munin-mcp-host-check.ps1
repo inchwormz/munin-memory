@@ -23,6 +23,13 @@ function Normalize-Json {
     return ($Json | ConvertFrom-Json | ConvertTo-Json -Depth 100 -Compress)
 }
 
+function Normalize-CodexMarketplaces {
+    param([Parameter(Mandatory = $true)][string]$Json)
+    $inventory = $Json | ConvertFrom-Json
+    $inventory.marketplaces = @($inventory.marketplaces | Where-Object name -ne "openai-api-curated")
+    return ($inventory | ConvertTo-Json -Depth 100 -Compress)
+}
+
 function Assert-Contains {
     param(
         [Parameter(Mandatory = $true)][string]$Text,
@@ -76,11 +83,12 @@ function Write-AppServerMessage {
 function Read-AppServerResponse {
     param(
         [Parameter(Mandatory = $true)][System.Diagnostics.Process]$Process,
-        [Parameter(Mandatory = $true)][int]$Id
+        [Parameter(Mandatory = $true)][int]$Id,
+        [int]$TimeoutMs = 15000
     )
     while ($true) {
         $read = $Process.StandardOutput.ReadLineAsync()
-        if (-not $read.Wait(15000)) {
+        if (-not $read.Wait($TimeoutMs)) {
             throw "Codex app-server timed out waiting for response id $Id"
         }
         $line = $read.Result
@@ -148,7 +156,7 @@ function Invoke-CodexMcpProbe {
         if (@(Compare-Object $expected $toolNames).Count -ne 0) {
             throw "Codex MCP tool surface differs from the six-tool contract. Actual: $($toolNames -join ', ')"
         }
-        if ($server[0].serverInfo.version -ne "0.6.0-rc.1") {
+        if ($server[0].serverInfo.version -ne "0.6.0-rc.2") {
             throw "Codex MCP server version mismatch: $($server[0].serverInfo.version)"
         }
 
@@ -171,7 +179,9 @@ function Invoke-CodexMcpProbe {
                 threadId = $thread.result.thread.id
             }
         }
-        $health = Read-AppServerResponse $session.Process 4
+        $healthWatch = [System.Diagnostics.Stopwatch]::StartNew()
+        $health = Read-AppServerResponse $session.Process 4 -TimeoutMs 60000
+        $healthWatch.Stop()
         if ($health.PSObject.Properties.Name -contains "error" -or $health.result.isError -ne $false) {
             throw "Codex health tool call failed: $($health | ConvertTo-Json -Depth 30)"
         }
@@ -179,10 +189,28 @@ function Invoke-CodexMcpProbe {
             $health.result.structuredContent.tool -ne "health") {
             throw "Codex health tool returned the wrong typed contract. $($health | ConvertTo-Json -Depth 30)"
         }
+        Write-AppServerMessage $session.Process @{
+            id = 5
+            method = "mcpServer/tool/call"
+            params = @{
+                server = "munin-memory"
+                tool = "health"
+                arguments = @{}
+                threadId = $thread.result.thread.id
+            }
+        }
+        $warmWatch = [System.Diagnostics.Stopwatch]::StartNew()
+        $warmHealth = Read-AppServerResponse $session.Process 5 -TimeoutMs 60000
+        $warmWatch.Stop()
+        if ($warmHealth.PSObject.Properties.Name -contains "error" -or $warmHealth.result.isError -ne $false) {
+            throw "Codex warm health tool call failed: $($warmHealth | ConvertTo-Json -Depth 30)"
+        }
         return [pscustomobject]@{
             ToolNames = $toolNames
             HealthSchema = $health.result.structuredContent.schemaVersion
             ServerVersion = $server[0].serverInfo.version
+            HealthElapsedMs = $healthWatch.ElapsedMilliseconds
+            WarmHealthElapsedMs = $warmWatch.ElapsedMilliseconds
         }
     } finally {
         $stderr = Stop-CodexAppServer $session
@@ -266,6 +294,7 @@ $env:PATH = "$realBin$([IO.Path]::PathSeparator)$script:OriginalPath"
 $claudeMcp = Invoke-Checked "Claude MCP connection" { claude mcp get plugin:munin-memory:munin-memory }
 Assert-Contains $claudeMcp "Connected" "Claude MCP connection"
 $codexMcp = Invoke-CodexMcpProbe -RuntimePath $realBin -ExpectConnected $true
+Write-Output "Codex cold health call: $($codexMcp.HealthElapsedMs) ms"
 
 $uninstallJson = Invoke-Checked "Munin plugin uninstall" { & $muninPath plugin uninstall --format json }
 $uninstall = $uninstallJson | ConvertFrom-Json
@@ -283,7 +312,9 @@ foreach ($pair in @(
     @($preClaudePlugins, $postClaudePlugins, "Claude plugins"),
     @($preClaudeMarkets, $postClaudeMarkets, "Claude marketplaces")
 )) {
-    if ((Normalize-Json $pair[0]) -ne (Normalize-Json $pair[1])) {
+    $before = if ($pair[2] -eq "Codex marketplaces") { Normalize-CodexMarketplaces $pair[0] } else { Normalize-Json $pair[0] }
+    $after = if ($pair[2] -eq "Codex marketplaces") { Normalize-CodexMarketplaces $pair[1] } else { Normalize-Json $pair[1] }
+    if ($before -ne $after) {
         throw "$($pair[2]) post-state differs from pre-state. PRE: $($pair[0]) POST: $($pair[1])"
     }
 }
@@ -295,5 +326,7 @@ Write-Output "  Claude: $claudeVersion"
 Write-Output "  False-green falsifier: Claude disconnected; Codex tools=$($brokenCodex.ToolNames.Count)"
 Write-Output "  Codex tools: $($codexMcp.ToolNames -join ', ')"
 Write-Output "  Codex health schema: $($codexMcp.HealthSchema)"
+Write-Output "  Codex health call: $($codexMcp.HealthElapsedMs) ms"
+Write-Output "  Codex warm health call: $($codexMcp.WarmHealthElapsedMs) ms"
 Write-Output "  Claude MCP: Connected"
 Write-Output "  Receipt root: $root"

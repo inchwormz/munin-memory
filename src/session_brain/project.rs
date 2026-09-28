@@ -4,6 +4,7 @@ use anyhow::{Context, Result};
 use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::{Duration, SystemTime};
 
 pub fn build_project_context(
     project_root: &Path,
@@ -18,10 +19,15 @@ pub fn build_project_context(
     if let Some(description) = description.clone() {
         summary.push(description);
     }
-    summary.extend(summarize_project_memory(project_memory.as_ref()));
     if let Some(active_area) = build_active_task_area(project_root, current_goal, task_hints) {
         summary.push(active_area);
     }
+    summary.extend(
+        relevant_project_notes(project_root, current_goal)
+            .into_iter()
+            .take(2),
+    );
+    summary.extend(summarize_project_memory(project_memory.as_ref()));
     if summary.is_empty() {
         summary.push("Project capsule fallback: repo description unavailable.".to_string());
     }
@@ -37,6 +43,134 @@ pub fn build_project_context(
         project_memory,
         priority_notes,
     })
+}
+
+/// Read a few recent task documents. A plan is evidence of intent, not proof
+/// that its work is still open or that its claims are true.
+pub(crate) fn relevant_project_notes(project_root: &Path, focus: Option<&str>) -> Vec<String> {
+    let focus_words = focus
+        .unwrap_or_default()
+        .split(|ch: char| !ch.is_alphanumeric())
+        .map(str::to_ascii_lowercase)
+        .filter(|word| {
+            word.len() > 3
+                && ![
+                    "this", "that", "with", "from", "what", "make", "work", "user",
+                ]
+                .contains(&word.as_str())
+        })
+        .collect::<std::collections::HashSet<_>>();
+    if focus_words.is_empty() {
+        return Vec::new();
+    }
+    let mut candidates = Vec::new();
+    for relative_dir in [
+        "",
+        "plans",
+        "docs/plans",
+        "docs/superpowers/plans",
+        "swarm/handoff",
+    ] {
+        let dir = project_root.join(relative_dir);
+        let Ok(entries) = fs::read_dir(dir) else {
+            continue;
+        };
+        for entry in entries.flatten().take(200) {
+            let path = entry.path();
+            let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+                continue;
+            };
+            if !path.is_file()
+                || !name.to_ascii_lowercase().ends_with(".md")
+                || [
+                    "readme.md",
+                    "agents.md",
+                    "claude.md",
+                    "changelog.md",
+                    "install.md",
+                    "security.md",
+                    "session_log.md",
+                ]
+                .contains(&name.to_ascii_lowercase().as_str())
+            {
+                continue;
+            }
+            let Ok(metadata) = path.metadata() else {
+                continue;
+            };
+            if metadata.len() > 128_000 {
+                continue;
+            }
+            let Ok(modified) = metadata.modified() else {
+                continue;
+            };
+            let age = SystemTime::now()
+                .duration_since(modified)
+                .unwrap_or_default();
+            if age > Duration::from_secs(45 * 24 * 3600) {
+                continue;
+            }
+            let Ok(content) = fs::read_to_string(&path) else {
+                continue;
+            };
+            let opening = content.lines().take(35).collect::<Vec<_>>().join("\n");
+            let lowered = opening.to_ascii_lowercase();
+            if lowered.lines().any(|line| {
+                [
+                    "status: complete",
+                    "status: done",
+                    "state: complete",
+                    "state: done",
+                ]
+                .iter()
+                .any(|marker| line.contains(marker))
+            }) {
+                continue;
+            }
+            let filename_words = name
+                .split(|ch: char| !ch.is_alphanumeric())
+                .map(str::to_ascii_lowercase)
+                .collect::<std::collections::HashSet<_>>();
+            let overlap = focus_words
+                .iter()
+                .filter(|word| filename_words.contains(*word))
+                .count();
+            let active_name = ["plan", "task", "roadmap", "handoff", "goal", "context"]
+                .iter()
+                .any(|part| name.to_ascii_lowercase().contains(part));
+            if overlap == 0 {
+                continue;
+            }
+            let Some(detail) = content.lines().map(str::trim).find(|line| {
+                !line.is_empty()
+                    && !line.starts_with('#')
+                    && !line.starts_with("---")
+                    && !line.starts_with("status:")
+                    && !line.starts_with("state:")
+            }) else {
+                continue;
+            };
+            let relative = relative_to_root(project_root, &path);
+            let days = age.as_secs() / (24 * 3600);
+            let score = overlap * 10 + usize::from(active_name) * 3 + usize::from(days <= 7) * 2;
+            candidates.push((
+                score,
+                modified,
+                format!(
+                    "Document {} (updated {}d ago; check current state): {}",
+                    relative,
+                    days,
+                    crate::core::utils::truncate(detail, 170)
+                ),
+            ));
+        }
+    }
+    candidates.sort_by(|a, b| b.0.cmp(&a.0).then(b.1.cmp(&a.1)));
+    candidates
+        .into_iter()
+        .take(2)
+        .map(|(_, _, note)| note)
+        .collect()
 }
 
 fn read_project_description(project_root: &Path) -> Result<Option<String>> {
@@ -319,6 +453,36 @@ fn join_relative(project_root: &Path, relative: &str) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn recent_relevant_plan_is_context_but_completed_or_unrelated_notes_are_not() {
+        let root = tempfile::tempdir().expect("tempdir");
+        let plans = root.path().join("plans");
+        fs::create_dir(&plans).expect("plans");
+        fs::write(
+            plans.join("munin-live-context.md"),
+            "# Munin live context\nKeep current user goals and plan decisions in the brief.\n",
+        )
+        .expect("plan");
+        fs::write(
+            plans.join("munin-old-friction.md"),
+            "# Old friction\nStatus: complete\nThe earlier issue is resolved.\n",
+        )
+        .expect("completed plan");
+        fs::write(
+            plans.join("unrelated-release.md"),
+            "# Unrelated release\nPackage metadata only.\n",
+        )
+        .expect("unrelated plan");
+
+        let notes = relevant_project_notes(root.path(), Some("Munin live context"));
+        assert_eq!(notes.len(), 1);
+        assert!(notes[0]
+            .replace('\\', "/")
+            .contains("plans/munin-live-context.md"));
+        assert!(notes[0].contains("current user goals"));
+        assert!(relevant_project_notes(root.path(), None).is_empty());
+    }
 
     #[test]
     fn task_hints_rank_relevant_files_ahead_of_static_defaults() {

@@ -627,10 +627,31 @@ pub fn run_startup_brief(
     let onboarding = tracker
         .get_memory_os_onboarding_state_fast()
         .context("Failed to load fast Memory OS onboarding state")?;
-    let project_path = crate::core::utils::current_project_root_string();
+    let project_path = project_path
+        .map(crate::core::utils::normalize_windows_path_string)
+        .unwrap_or_else(crate::core::utils::current_project_root_string);
     let preferences = tracker.get_memory_os_user_preferences_fast(&project_path)?;
-    let last_request = tracker.get_memory_os_recent_project_request_fast(&project_path)?;
-    let last_outcome = tracker.get_memory_os_recent_project_outcome_fast(&project_path)?;
+    let project_is_identified = crate::core::utils::has_project_marker(Path::new(&project_path));
+    let (last_request, last_outcome) = if project_is_identified {
+        (
+            tracker.get_memory_os_recent_project_request_fast(&project_path)?,
+            tracker.get_memory_os_recent_project_outcome_fast(&project_path)?,
+        )
+    } else {
+        (None, None)
+    };
+    let last_outcome = last_outcome.filter(|outcome| {
+        last_request.as_ref().is_some_and(|request| {
+            request
+                .evidence
+                .iter()
+                .find(|item| item.starts_with("checkpoint:"))
+                == outcome
+                    .evidence
+                    .iter()
+                    .find(|item| item.starts_with("checkpoint:"))
+        })
+    });
     println!(
         "{}",
         render_fast_startup_brief(
@@ -686,10 +707,8 @@ fn render_fast_startup_brief(
         project_path,
         Utc::now().to_rfc3339()
     ));
-    lines.push("<what_i_know>".to_string());
-    if preferences.is_empty() && last_request.is_none() && last_outcome.is_none() {
-        lines.push("- No relevant compiled memory was found for this project.".to_string());
-    } else {
+    if !preferences.is_empty() {
+        lines.push("<what_i_know>".to_string());
         for finding in preferences.iter().take(2) {
             let observed = finding
                 .evidence
@@ -702,10 +721,10 @@ fn render_fast_startup_brief(
                 display_text(&finding.summary, 200)
             ));
         }
+        lines.push("</what_i_know>".to_string());
     }
-    lines.push("</what_i_know>".to_string());
-    lines.push("<project_history>".to_string());
     if let Some(request) = last_request {
+        lines.push("<project_history>".to_string());
         let observed = request
             .evidence
             .iter()
@@ -713,35 +732,49 @@ fn render_fast_startup_brief(
             .and_then(|value| value.get(..10))
             .unwrap_or("unknown date");
         lines.push(format!(
-            "- Last recorded request on {observed} (completion unknown): {}",
+            "- Recent user topic on {observed}: {}",
             display_text(&request.summary, 240)
         ));
+        if let Some(outcome) = last_outcome {
+            let observed = outcome
+                .evidence
+                .iter()
+                .find_map(|item| item.strip_prefix("observed:"))
+                .and_then(|value| value.get(..10))
+                .unwrap_or("unknown date");
+            lines.push(format!(
+                "- Agent reported on {observed} (unverified): {}",
+                display_text(&outcome.summary, 240)
+            ));
+        }
+        lines.push("</project_history>".to_string());
+    }
+    let focus = last_request.map(|request| request.summary.as_str());
+    let notes = if crate::core::utils::has_project_marker(Path::new(project_path)) {
+        crate::session_brain::project::relevant_project_notes(Path::new(project_path), focus)
     } else {
-        lines.push("- No recorded request for this project.".to_string());
+        Vec::new()
+    };
+    if !notes.is_empty() {
+        lines.push("<relevant_documents>".to_string());
+        for note in &notes {
+            lines.push(format!("- {note}"));
+        }
+        lines.push("</relevant_documents>".to_string());
     }
-    if let Some(outcome) = last_outcome {
-        let observed = outcome
-            .evidence
-            .iter()
-            .find_map(|item| item.strip_prefix("observed:"))
-            .and_then(|value| value.get(..10))
-            .unwrap_or("unknown date");
-        lines.push(format!(
-            "- Agent reported on {observed} (unverified): {}",
-            display_text(&outcome.summary, 240)
-        ));
+    if preferences.is_empty()
+        && last_request.is_none()
+        && last_outcome.is_none()
+        && notes.is_empty()
+    {
+        lines.push("- No reliable project memory is recorded yet.".to_string());
     }
-    lines.push("</project_history>".to_string());
-    lines.push("<watchouts>".to_string());
-    if let Some(imported_at) = onboarding.completed_at.as_deref() {
-        lines.push(format!(
-            "- Compiled sessions last refreshed at {imported_at}."
-        ));
-    } else {
-        lines.push("- No completed session import is recorded.".to_string());
+    if onboarding.completed_at.is_none() && onboarding.sessions_processed > 0 {
+        lines.push(
+            "<coverage>Recent context is available; older sessions are still indexing.</coverage>"
+                .to_string(),
+        );
     }
-    lines.push("- Check the current tree before treating historical work as active.".to_string());
-    lines.push("</watchouts>".to_string());
     lines.push("</startup_memory_brief>".to_string());
     lines.join("\n")
 }
@@ -4040,7 +4073,7 @@ mod tests {
 
         assert!(rendered.contains("<startup_memory_brief scope=\"user\""));
         assert!(rendered.contains("I prefer concise reports with evidence"));
-        assert!(rendered.contains("completion unknown"));
+        assert!(rendered.contains("Recent user topic on 2026-04-21"));
         assert!(rendered.contains("Agent reported on 2026-04-21 (unverified)"));
         assert!(!rendered.contains("shell executions"));
         assert!(!rendered.contains("3836 sessions"));

@@ -4,6 +4,7 @@ use rusqlite::params;
 use serde_json::Value;
 use std::collections::HashSet;
 
+use super::checkpoint::delegated_agent_prompt;
 use super::{resolved_project_path, Tracker};
 use crate::core::memory_os::{
     MemoryOsPacketSelection, MemoryOsRecallSessionCommandCounts, MemoryOsRecallSessionSummary,
@@ -39,7 +40,10 @@ impl Tracker {
             let source_ref = format!("checkpoint:{}", checkpoint.capture.packet_id);
             let mut candidates = Vec::new();
             for item in &checkpoint.capture.selected_items {
-                if matches!(item.kind.as_str(), "user-prompt" | "project-focus") {
+                if matches!(
+                    item.kind.as_str(),
+                    "user-prompt" | "project-focus" | "agent-reported-outcome"
+                ) {
                     continue;
                 }
                 candidates.push((
@@ -57,18 +61,34 @@ impl Tracker {
                 } else {
                     360
                 };
-                let answer = truncate(text.trim(), max_answer_chars);
+                let answer = if source_kind == "session-summary" {
+                    let Some(answer) = concise_session_context(session_summary.as_ref()) else {
+                        continue;
+                    };
+                    answer
+                } else {
+                    truncate(text.trim(), max_answer_chars)
+                };
                 let overlap = token_overlap(&tokens, &answer);
                 if !query_matches(&tokens, &answer, overlap) {
                     continue;
                 }
                 let project_score = if project_bonus { 8 } else { 0 };
-                let recency_score =
-                    if checkpoint.captured_at > Utc::now() - chrono::Duration::days(14) {
-                        4
-                    } else {
-                        0
-                    };
+                let observed = session_summary
+                    .as_ref()
+                    .and_then(|summary| summary.started_at.as_deref())
+                    .unwrap_or(&checkpoint.capture.generated_at);
+                let observed = chrono::DateTime::parse_from_rfc3339(observed)
+                    .map(|time| time.with_timezone(&Utc))
+                    .unwrap_or(checkpoint.captured_at);
+                let age = Utc::now() - observed;
+                let recency_score = if age < chrono::Duration::days(14) {
+                    24
+                } else if age < chrono::Duration::days(45) {
+                    12
+                } else {
+                    0
+                };
                 let score = base_score + (overlap as i64 * 12) + project_score + recency_score;
                 let title = title_from_text(&answer);
                 matches.push(crate::core::memory_os::MemoryOsRecallMatch {
@@ -225,6 +245,40 @@ impl Tracker {
         });
         Ok(matches)
     }
+}
+
+fn concise_session_context(summary: Option<&MemoryOsRecallSessionSummary>) -> Option<String> {
+    let summary = summary?;
+    let first = summary
+        .first_user_ask
+        .as_ref()
+        .filter(|text| !delegated_agent_prompt(text));
+    let latest = summary
+        .latest_user_ask
+        .as_ref()
+        .filter(|text| !delegated_agent_prompt(text));
+    let ask = first.or(latest)?;
+    let mut lines = Vec::new();
+    if let Some(date) = summary
+        .started_at
+        .as_deref()
+        .and_then(|date| date.get(..10))
+    {
+        lines.push(format!("User request on {date}: {ask}"));
+    } else {
+        lines.push(format!("User request: {ask}"));
+    }
+    if let Some(latest) = latest.filter(|latest| *latest != ask) {
+        lines.push(format!("Latest user direction: {latest}"));
+    }
+    if let Some(result) = summary
+        .bullets
+        .iter()
+        .find_map(|bullet| bullet.strip_prefix("Agent reported (unverified):"))
+    {
+        lines.push(format!("Agent reported (unverified): {}", result.trim()));
+    }
+    Some(lines.join("\n"))
 }
 
 fn query_tokens(query: &str) -> Vec<String> {
@@ -583,15 +637,11 @@ mod tests {
 
         assert!(!report.matches.is_empty());
         assert_eq!(report.matches[0].source_kind, "session-summary");
-        assert_eq!(
-            report.matches[0]
-                .answer
-                .lines()
-                .filter(|line| line.starts_with("- "))
-                .count(),
-            5
-        );
+        assert!(report.matches[0]
+            .answer
+            .contains("User request on 2026-04-18"));
         assert!(report.matches[0].answer.contains("Munin recall"));
+        assert!(!report.matches[0].answer.contains("command(s) captured"));
         let summary = report.matches[0]
             .session_summary
             .as_ref()

@@ -32,6 +32,9 @@ enum Commands {
         /// Inspection scope
         #[arg(long, default_value = "user")]
         scope: String,
+        /// Project directory to read from another working directory
+        #[arg(long)]
+        project: Option<String>,
         /// Output format
         #[arg(short, long, default_value = "prompt")]
         format: String,
@@ -696,8 +699,22 @@ fn main() {
 fn run_cli() -> Result<i32> {
     let cli = Cli::parse();
     let code = match cli.command {
-        Commands::Resume { scope, format } => {
-            analytics::memory_os_cmd::run_startup_brief(&scope, None, &format, cli.verbose)?;
+        Commands::Resume {
+            scope,
+            project,
+            format,
+        } => {
+            let scope = if project.is_some() && scope == "user" {
+                "project"
+            } else {
+                &scope
+            };
+            analytics::memory_os_cmd::run_startup_brief(
+                scope,
+                project.as_deref(),
+                &format,
+                cli.verbose,
+            )?;
             0
         }
         Commands::Brain { format } => {
@@ -2167,6 +2184,7 @@ mod tests {
     #[test]
     fn public_munin_commands_parse() {
         parse_ok(&["munin", "resume", "--format", "prompt"]);
+        parse_ok(&["munin", "resume", "--project", "C:/repo"]);
         parse_ok(&["munin", "brain", "--format", "prompt"]);
         parse_ok(&[
             "munin",

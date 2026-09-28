@@ -75,6 +75,7 @@ pub(crate) struct ShellExecution {
 pub(crate) struct SessionRecord {
     pub(crate) source: SessionSource,
     pub(crate) session_id: String,
+    pub(crate) is_subagent: bool,
     pub(crate) cwd: String,
     pub(crate) started_at: DateTime<Utc>,
     pub(crate) user_prompts: Vec<UserPrompt>,
@@ -946,6 +947,48 @@ fn load_codex_sessions(
     Ok(sessions)
 }
 
+/// A bounded bootstrap for agent context. It reads recent Codex user turns and
+/// final answers without decoding tool output, then the ordinary import can
+/// continue through the full archive.
+pub(crate) fn load_recent_codex_semantic_sessions(
+    modified_since: std::time::SystemTime,
+    max_files: usize,
+) -> Result<Vec<SessionRecord>> {
+    let mut files = Vec::new();
+    for root in discover_codex_session_roots()? {
+        for entry in WalkDir::new(root)
+            .follow_links(false)
+            .into_iter()
+            .filter_map(|entry| entry.ok())
+        {
+            let path = entry.path();
+            if path.extension().and_then(|ext| ext.to_str()) != Some("jsonl")
+                || path
+                    .to_string_lossy()
+                    .to_ascii_lowercase()
+                    .contains("subagents")
+                || !file_modified_since(path, Some(modified_since))
+            {
+                continue;
+            }
+            if let Ok(modified) = path.metadata().and_then(|meta| meta.modified()) {
+                files.push((modified, path.to_path_buf()));
+            }
+        }
+    }
+    files.sort_by(|left, right| right.0.cmp(&left.0).then(left.1.cmp(&right.1)));
+    let mut sessions = Vec::new();
+    for (_, path) in files.into_iter().take(max_files) {
+        if let Some(session) = parse_codex_session_with_mode(&path, true)? {
+            if !session.is_subagent {
+                sessions.push(session);
+            }
+        }
+    }
+    sessions.sort_by(|left, right| right.started_at.cmp(&left.started_at));
+    Ok(sessions)
+}
+
 fn load_codex_history_sessions(
     project_filter: Option<&str>,
     since_days: Option<u64>,
@@ -1024,6 +1067,7 @@ fn load_codex_history_sessions_from_path(
             .or_insert_with(|| SessionRecord {
                 source: SessionSource::Codex,
                 session_id: session_id.to_string(),
+                is_subagent: false,
                 cwd: String::new(),
                 started_at,
                 user_prompts: Vec::new(),
@@ -1056,9 +1100,10 @@ fn discover_codex_session_roots() -> Result<Vec<PathBuf>> {
     let mut seen = std::collections::HashSet::new();
 
     if let Some(home) = session_home_dir() {
-        let primary = home.join(".codex").join("sessions");
-        if primary.exists() && seen.insert(primary.clone()) {
-            roots.push(primary);
+        for root in codex_home_roots(&home) {
+            if seen.insert(root.clone()) {
+                roots.push(root);
+            }
         }
     }
 
@@ -1093,6 +1138,14 @@ fn discover_codex_session_roots() -> Result<Vec<PathBuf>> {
 
     roots.sort();
     Ok(roots)
+}
+
+fn codex_home_roots(home: &Path) -> Vec<PathBuf> {
+    ["sessions", "archived_sessions"]
+        .into_iter()
+        .map(|folder| home.join(".codex").join(folder))
+        .filter(|root| root.exists())
+        .collect()
 }
 
 pub(crate) fn session_home_dir() -> Option<PathBuf> {
@@ -1332,6 +1385,7 @@ fn parse_claude_session(path: &Path) -> Result<Option<SessionRecord>> {
     Ok(Some(SessionRecord {
         source: SessionSource::Claude,
         session_id,
+        is_subagent: false,
         cwd,
         started_at: started_at.unwrap_or_else(Utc::now),
         user_prompts,
@@ -1367,6 +1421,13 @@ fn extract_claude_user_prompt(entry: &Value) -> Option<String> {
 }
 
 fn parse_codex_session(path: &Path) -> Result<Option<SessionRecord>> {
+    parse_codex_session_with_mode(path, false)
+}
+
+fn parse_codex_session_with_mode(
+    path: &Path,
+    semantic_only: bool,
+) -> Result<Option<SessionRecord>> {
     let file = File::open(path).with_context(|| format!("failed to open {}", path.display()))?;
     let reader = BufReader::new(file);
 
@@ -1381,13 +1442,26 @@ fn parse_codex_session(path: &Path) -> Result<Option<SessionRecord>> {
     let mut assistant_outcome = None;
     let mut shells = Vec::new();
     let mut pending: HashMap<String, CodexPendingCommand> = HashMap::new();
-    let mut _is_subagent = false;
+    let mut is_subagent = false;
 
     for line in reader.lines() {
         let line = match line {
             Ok(line) => line,
             Err(_) => continue,
         };
+        if semantic_only
+            && (line.len() > 1_000_000
+                || ![
+                    "session_meta",
+                    "user_message",
+                    "final_answer",
+                    "\"role\":\"user\"",
+                ]
+                .iter()
+                .any(|marker| line.contains(marker)))
+        {
+            continue;
+        }
         let entry: Value = match serde_json::from_str(&line) {
             Ok(value) => value,
             Err(_) => continue,
@@ -1410,7 +1484,7 @@ fn parse_codex_session(path: &Path) -> Result<Option<SessionRecord>> {
             "session_meta" => {
                 if let Some(payload) = entry.get("payload") {
                     if payload.pointer("/source/subagent/thread_spawn").is_some() {
-                        _is_subagent = true;
+                        is_subagent = true;
                     }
                     session_id = payload
                         .get("id")
@@ -1485,6 +1559,9 @@ fn parse_codex_session(path: &Path) -> Result<Option<SessionRecord>> {
                             text,
                         });
                     }
+                }
+                if semantic_only {
+                    continue;
                 }
                 match payload.get("type").and_then(|value| value.as_str()) {
                     Some("function_call")
@@ -1561,6 +1638,7 @@ fn parse_codex_session(path: &Path) -> Result<Option<SessionRecord>> {
     Ok(Some(SessionRecord {
         source: SessionSource::Codex,
         session_id,
+        is_subagent,
         cwd,
         started_at: started_at.unwrap_or_else(Utc::now),
         user_prompts,
@@ -1706,6 +1784,17 @@ mod tests {
     }
 
     #[test]
+    fn codex_session_discovery_includes_archived_conversations() {
+        let dir = TempDir::new().unwrap();
+        let codex = dir.path().join(".codex");
+        std::fs::create_dir_all(codex.join("sessions")).unwrap();
+        std::fs::create_dir_all(codex.join("archived_sessions")).unwrap();
+        let roots = codex_home_roots(dir.path());
+        assert!(roots.contains(&codex.join("sessions")));
+        assert!(roots.contains(&codex.join("archived_sessions")));
+    }
+
+    #[test]
     fn parses_claude_prompts_and_shells() {
         let dir = TempDir::new().unwrap();
         let path = dir.path().join("session.jsonl");
@@ -1749,6 +1838,7 @@ mod tests {
 
         let session = parse_codex_session(&path).unwrap().unwrap();
         assert_eq!(session.session_id, "abc");
+        assert!(!session.is_subagent);
         assert_eq!(session.cwd, "C:\\repo");
         assert_eq!(session.user_prompts.len(), 2);
         assert_eq!(session.shells.len(), 2);
@@ -1758,6 +1848,12 @@ mod tests {
             session.assistant_outcome.as_deref(),
             Some("Verified: the corrected search found the match. Next: inspect the result.")
         );
+        let semantic = parse_codex_session_with_mode(&path, true)
+            .unwrap()
+            .expect("semantic session");
+        assert_eq!(semantic.user_prompts.len(), 2);
+        assert_eq!(semantic.assistant_outcome, session.assistant_outcome);
+        assert!(semantic.shells.is_empty());
 
         let subagent_path = dir.path().join("subagent.jsonl");
         write_lines(
@@ -1771,6 +1867,7 @@ mod tests {
         );
         let sub = parse_codex_session(&subagent_path).unwrap().unwrap();
         assert_eq!(sub.session_id, "sub");
+        assert!(sub.is_subagent);
         assert_eq!(sub.user_prompts.len(), 1);
         assert_eq!(sub.shells.len(), 1);
     }
@@ -1847,6 +1944,7 @@ mod tests {
         let session = SessionRecord {
             source: SessionSource::Claude,
             session_id: "s1".to_string(),
+            is_subagent: false,
             cwd: "C:\\repo".to_string(),
             started_at: parse_timestamp("2026-04-10T00:00:00Z").unwrap(),
             user_prompts: vec![
