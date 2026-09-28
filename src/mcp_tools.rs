@@ -306,7 +306,15 @@ fn friction(input: FrictionInput) -> Result<Value> {
     let limit = validate_limit(input.limit)?;
     let scope = parse_scope(input.scope.as_deref(), input.project_path.as_deref())?;
     let tracker = Tracker::new().context("failed to open Munin history")?;
-    let report = tracker.get_memory_os_friction_report(scope, input.project_path.as_deref())?;
+    let report = if input.include_resolved {
+        tracker.get_memory_os_friction_report(scope, input.project_path.as_deref())?
+    } else {
+        tracker.get_memory_os_recent_friction_report(
+            scope,
+            input.project_path.as_deref(),
+            Utc::now() - chrono::Duration::days(7),
+        )?
+    };
     let mut fixes = report
         .top_fixes
         .into_iter()

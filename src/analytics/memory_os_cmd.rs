@@ -494,13 +494,32 @@ pub fn run_friction_filtered(
     crate::analytics::session_backfill::refresh_memory_os_session_import_before_read()?;
 
     let tracker = Tracker::new().context("Failed to initialize tracking database")?;
-    let mut report = tracker
-        .get_memory_os_friction_report(scope, project_path)
-        .context("Failed to compile Memory OS friction report")?;
+    let historical = last == Some("all")
+        || last
+            .and_then(parse_last_window)
+            .is_some_and(|since| since < Utc::now() - chrono::Duration::days(45));
+    let mut report = if historical {
+        tracker.get_memory_os_friction_report(scope, project_path)
+    } else {
+        tracker.get_memory_os_recent_friction_report(
+            scope,
+            project_path,
+            last.and_then(parse_last_window)
+                .unwrap_or_else(|| Utc::now() - chrono::Duration::days(7)),
+        )
+    }
+    .context("Failed to compile Memory OS friction report")?;
     apply_friction_filters(&mut report, agent, last);
 
     match format {
         "json" => println!("{}", serde_json::to_string_pretty(&report)?),
+        "text"
+            if !historical
+                && report.top_fixes.is_empty()
+                && report.new_unproven_friction.is_empty() =>
+        {
+            println!("No clearly unresolved user correction found in this period.");
+        }
         "text" => render_friction_text(&report),
         _ => unreachable!("format is validated before database access"),
     }
@@ -627,11 +646,19 @@ pub fn run_startup_brief(
     let onboarding = tracker
         .get_memory_os_onboarding_state_fast()
         .context("Failed to load fast Memory OS onboarding state")?;
+    let implicit_project = project_path.is_none();
     let project_path = project_path
         .map(crate::core::utils::normalize_windows_path_string)
         .unwrap_or_else(crate::core::utils::current_project_root_string);
     let preferences = tracker.get_memory_os_user_preferences_fast(&project_path)?;
     let project_is_identified = crate::core::utils::has_project_marker(Path::new(&project_path));
+    let live_brain = if implicit_project && !project_is_identified {
+        crate::session_brain::build_current_session_brain()
+            .ok()
+            .filter(|brain| brain.meta.source_status == "live")
+    } else {
+        None
+    };
     let (last_request, last_outcome) = if project_is_identified {
         (
             tracker.get_memory_os_recent_project_request_fast(&project_path)?,
@@ -652,17 +679,27 @@ pub fn run_startup_brief(
                     .find(|item| item.starts_with("checkpoint:"))
         })
     });
-    println!(
-        "{}",
-        render_fast_startup_brief(
-            scope,
-            &project_path,
-            &onboarding,
-            &preferences,
-            last_request.as_ref(),
-            last_outcome.as_ref()
-        )
+    let startup = render_fast_startup_brief(
+        scope,
+        &project_path,
+        &onboarding,
+        &preferences,
+        last_request.as_ref(),
+        last_outcome.as_ref(),
+        live_brain.is_some(),
     );
+    if !startup.is_empty() {
+        println!("{startup}");
+    }
+    if let Some(brain) = live_brain {
+        println!(
+            "{}",
+            crate::session_brain::render_session_brain(
+                &brain,
+                crate::session_brain::SessionBrainRenderMode::Prompt
+            )?
+        );
+    }
     Ok(())
 }
 
@@ -699,6 +736,7 @@ fn render_fast_startup_brief(
     preferences: &[MemoryOsNarrativeFinding],
     last_request: Option<&MemoryOsNarrativeFinding>,
     last_outcome: Option<&MemoryOsNarrativeFinding>,
+    has_live_context: bool,
 ) -> String {
     let mut lines = Vec::new();
     lines.push(format!(
@@ -762,10 +800,19 @@ fn render_fast_startup_brief(
         }
         lines.push("</relevant_documents>".to_string());
     }
+    if has_live_context
+        && preferences.is_empty()
+        && last_request.is_none()
+        && last_outcome.is_none()
+        && notes.is_empty()
+    {
+        return String::new();
+    }
     if preferences.is_empty()
         && last_request.is_none()
         && last_outcome.is_none()
         && notes.is_empty()
+        && !has_live_context
     {
         lines.push("- No reliable project memory is recorded yet.".to_string());
     }
@@ -4123,6 +4170,7 @@ mod tests {
             &[preference],
             Some(&request),
             Some(&outcome),
+            false,
         );
 
         assert!(rendered.contains("<startup_memory_brief scope=\"user\""));
@@ -4131,6 +4179,16 @@ mod tests {
         assert!(rendered.contains("Agent reported on 2026-04-21 (unverified)"));
         assert!(!rendered.contains("shell executions"));
         assert!(!rendered.contains("3836 sessions"));
+        let live_only = render_fast_startup_brief(
+            MemoryOsInspectionScope::User,
+            "C:/projectless-chat",
+            &onboarding,
+            &[],
+            None,
+            None,
+            true,
+        );
+        assert!(live_only.is_empty());
     }
 
     #[test]

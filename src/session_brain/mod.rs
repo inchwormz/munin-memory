@@ -197,12 +197,12 @@ fn render_prompt(brain: &SessionBrain) -> String {
     if let Some(goal) = brain.agenda.current_goal.as_deref() {
         lines.push(format!("- current ask: {}", goal));
     }
-    if let Some(latest) = brain
+    let latest_user_direction = brain
         .messages
         .user
         .last()
-        .map(|message| message.text.trim())
-    {
+        .map(|message| message.text.trim());
+    if let Some(latest) = latest_user_direction {
         if !latest.is_empty()
             && !brain
                 .agenda
@@ -227,6 +227,8 @@ fn render_prompt(brain: &SessionBrain) -> String {
             text.len() >= 30
                 && !text.starts_with('#')
                 && !text.starts_with('<')
+                && !latest_user_direction
+                    .is_some_and(|latest| timing_instruction_superseded(latest, text))
                 && !brain
                     .agenda
                     .current_goal
@@ -319,6 +321,19 @@ fn render_prompt(brain: &SessionBrain) -> String {
 
     lines.push("</session_brain>".to_string());
     lines.join("\n")
+}
+
+fn timing_instruction_superseded(latest: &str, previous: &str) -> bool {
+    let latest = latest.to_ascii_lowercase();
+    let previous = previous.to_ascii_lowercase();
+    let deadline = previous.contains("finish")
+        && ["minute", "hour", "by latest", "at the end of your next"]
+            .iter()
+            .any(|term| previous.contains(term));
+    let extension = ["keep going", "more time", "no deadline", "take your time"]
+        .iter()
+        .any(|term| latest.contains(term));
+    deadline && extension
 }
 
 #[cfg(test)]
@@ -473,6 +488,27 @@ mod tests {
         assert!(rendered.contains("latest user direction: Please finish"));
         assert!(rendered.contains("recent user requirement: Keep the remembered context fresh"));
         assert!(!rendered.contains("AGENTS.md instructions"));
+    }
+
+    #[test]
+    fn prompt_renderer_drops_deadline_after_user_extends_work() {
+        let mut brain = sample_brain();
+        let template = brain.messages.user[0].clone();
+        brain.messages.user = [
+            "Keep the remembered context fresh and remove old frustrations.",
+            "Please finish this work within 45 minutes.",
+            "You can keep going actually keep improving it.",
+        ]
+        .into_iter()
+        .map(|text| SessionBrainMessage {
+            text: text.to_string(),
+            ..template.clone()
+        })
+        .collect();
+        let rendered = render_prompt(&brain);
+        assert!(rendered.contains("latest user direction: You can keep going"));
+        assert!(rendered.contains("recent user requirement: Keep the remembered context fresh"));
+        assert!(!rendered.contains("45 minutes"));
     }
 
     #[test]

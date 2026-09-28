@@ -1,5 +1,6 @@
 use anyhow::Result;
-use chrono::Utc;
+use chrono::{DateTime, Utc};
+use sha2::{Digest, Sha256};
 
 use super::read_model::{
     build_memory_os_active_work, build_memory_os_autonomy_findings,
@@ -197,6 +198,79 @@ impl Tracker {
         scope: crate::core::memory_os::MemoryOsInspectionScope,
         project_path: Option<&str>,
     ) -> Result<crate::core::memory_os::MemoryOsFrictionReport> {
+        self.compile_memory_os_friction_report(scope, project_path)
+    }
+
+    pub fn get_memory_os_recent_friction_report(
+        &self,
+        scope: crate::core::memory_os::MemoryOsInspectionScope,
+        project_path: Option<&str>,
+        since: DateTime<Utc>,
+    ) -> Result<crate::core::memory_os::MemoryOsFrictionReport> {
+        let checkpoints = self.load_memory_os_checkpoint_captures(scope, project_path)?;
+        let mut seen = std::collections::HashSet::new();
+        let mut fixes = Vec::new();
+        for checkpoint in checkpoints {
+            let Ok(observed) = DateTime::parse_from_rfc3339(&checkpoint.capture.generated_at)
+            else {
+                continue;
+            };
+            if observed.with_timezone(&Utc) < since
+                || checkpoint.capture.profile != "session-onboarding"
+                || checkpoint
+                    .capture
+                    .selected_items
+                    .iter()
+                    .any(|item| item.section == "session_outcome")
+            {
+                continue;
+            }
+            for item in checkpoint
+                .capture
+                .selected_items
+                .iter()
+                .filter(|item| item.section == "user_prompts")
+            {
+                let Some(summary) = current_unresolved_user_correction(&item.summary) else {
+                    continue;
+                };
+                if !seen.insert(summary.to_ascii_lowercase()) {
+                    continue;
+                }
+                let signal_id = format!("{:x}", Sha256::digest(summary.as_bytes()));
+                fixes.push(crate::core::memory_os::MemoryOsFrictionFix {
+                    fix_id: format!("friction:recent-user-correction:{}", &signal_id[..16]),
+                    title: "Recent unresolved user correction".to_string(),
+                    impact: "medium".to_string(),
+                    status: "active".to_string(),
+                    summary,
+                    permanent_fix: "Check current work and evidence, then resolve the specific issue the user raised.".to_string(),
+                    evidence: vec![format!("user correction at {}", checkpoint.capture.generated_at)],
+                    last_signal_at: Some(checkpoint.capture.generated_at.clone()),
+                    score: 100,
+                });
+            }
+        }
+        fixes.sort_by(|left, right| right.last_signal_at.cmp(&left.last_signal_at));
+        fixes.truncate(5);
+        Ok(crate::core::memory_os::MemoryOsFrictionReport {
+            generated_at: Utc::now().to_rfc3339(),
+            scope,
+            top_fixes: fixes,
+            new_unproven_friction: Vec::new(),
+            by_source: Vec::new(),
+            redirects: crate::core::memory_os::MemoryOsRedirectSummary::default(),
+            repeated_corrections: Vec::new(),
+            likely_misunderstandings: Vec::new(),
+            behavior_changes: Vec::new(),
+        })
+    }
+
+    fn compile_memory_os_friction_report(
+        &self,
+        scope: crate::core::memory_os::MemoryOsInspectionScope,
+        project_path: Option<&str>,
+    ) -> Result<crate::core::memory_os::MemoryOsFrictionReport> {
         let onboarding_status =
             crate::analytics::session_backfill::get_memory_os_session_backfill_status()?;
         let checkpoints = self.load_memory_os_checkpoint_captures(scope, project_path)?;
@@ -263,6 +337,46 @@ impl Tracker {
             likely_misunderstandings,
             behavior_changes,
         })
+    }
+}
+
+fn current_unresolved_user_correction(text: &str) -> Option<String> {
+    let text = text.trim();
+    if text.is_empty() || text.len() > 500 || text.contains('\n') {
+        return None;
+    }
+    let lowered = text.to_ascii_lowercase();
+    if lowered.contains("agents.md") || lowered.contains("<environment_context>") {
+        return None;
+    }
+    let unresolved = [
+        "still broken",
+        "still not working",
+        "still failing",
+        "not fixed yet",
+        "hasn't been fixed",
+        "keeps failing",
+        "keeps happening",
+        "you keep doing",
+    ]
+    .iter()
+    .any(|phrase| lowered.contains(phrase));
+    unresolved.then(|| text.chars().take(220).collect())
+}
+
+#[cfg(test)]
+mod recent_friction_tests {
+    use super::current_unresolved_user_correction;
+
+    #[test]
+    fn requires_explicit_unresolved_correction() {
+        assert!(current_unresolved_user_correction("The live view is still broken").is_some());
+        assert!(current_unresolved_user_correction("This keeps happening in Munin").is_some());
+        assert!(
+            current_unresolved_user_correction("Please kill old frustrations from memory")
+                .is_none()
+        );
+        assert!(current_unresolved_user_correction("AGENTS.md says it is still broken").is_none());
     }
 }
 
