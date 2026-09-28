@@ -1,45 +1,46 @@
 use super::types::SessionBrainUserContext;
 use crate::core::memory_os::{
     MemoryOsFrictionReport, MemoryOsInspectionScope, MemoryOsNarrativeFinding,
-    MemoryOsOnboardingState, MemoryOsProfileReport,
+    MemoryOsProfileReport,
 };
 use crate::core::tracking::Tracker;
 use crate::core::utils::truncate;
+use std::path::Path;
 
-pub fn build_user_context(tracker: &Tracker) -> SessionBrainUserContext {
+pub fn build_user_context(tracker: &Tracker, project_root: &Path) -> SessionBrainUserContext {
     if std::env::var_os("MUNIN_SESSION_BRAIN_FULL_USER_CONTEXT").is_some() {
         return build_full_user_context(tracker);
     }
 
-    build_default_user_context(tracker)
+    build_default_user_context(tracker, project_root)
 }
 
-fn build_fast_user_context(tracker: &Tracker) -> SessionBrainUserContext {
-    let onboarding = tracker.get_memory_os_onboarding_state_fast().ok();
-
+fn build_default_user_context(tracker: &Tracker, project_root: &Path) -> SessionBrainUserContext {
+    let preferences = tracker
+        .get_memory_os_user_preferences_fast(project_root.to_string_lossy().as_ref())
+        .unwrap_or_default();
+    let brief = preferences
+        .iter()
+        .take(2)
+        .map(|finding| {
+            let observed = finding
+                .evidence
+                .iter()
+                .find_map(|item| item.strip_prefix("observed:"))
+                .and_then(|value| value.get(..10))
+                .unwrap_or("unknown date");
+            format!(
+                "Possible preference (observed {observed}): {}",
+                finding.summary
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(" | ");
     SessionBrainUserContext {
-        brief: String::new(),
-        overview: build_fast_overview_line(onboarding.as_ref()),
+        brief: truncate(&brief, 420),
+        overview: String::new(),
         profile: String::new(),
         friction: String::new(),
-    }
-}
-
-fn build_default_user_context(tracker: &Tracker) -> SessionBrainUserContext {
-    let scope = MemoryOsInspectionScope::User;
-    let profile = tracker.get_memory_os_profile_report(scope, None).ok();
-    let friction = tracker.get_memory_os_friction_report(scope, None).ok();
-    let mut context = SessionBrainUserContext {
-        brief: build_brief_line(profile.as_ref()),
-        overview: build_overview_line(profile.as_ref()),
-        profile: build_profile_line(profile.as_ref()),
-        friction: build_friction_line(friction.as_ref()),
-    };
-    dedupe_user_context_fields(&mut context);
-    if user_context_has_content(&context) {
-        context
-    } else {
-        build_fast_user_context(tracker)
     }
 }
 
@@ -56,33 +57,6 @@ fn build_full_user_context(tracker: &Tracker) -> SessionBrainUserContext {
     };
     dedupe_user_context_fields(&mut context);
     context
-}
-
-fn user_context_has_content(context: &SessionBrainUserContext) -> bool {
-    [
-        &context.brief,
-        &context.overview,
-        &context.profile,
-        &context.friction,
-    ]
-    .iter()
-    .any(|value| {
-        let trimmed = value.trim();
-        !trimmed.is_empty() && !trimmed.ends_with(": none")
-    })
-}
-
-fn build_fast_overview_line(onboarding: Option<&MemoryOsOnboardingState>) -> String {
-    let Some(onboarding) = onboarding else {
-        return String::new();
-    };
-    truncate(
-        &format!(
-            "Compiled Memory OS has indexed {} sessions / {} shell executions. If this is empty, run `munin memory-os ingest --force` before expecting user/project history.",
-            onboarding.sessions_processed, onboarding.shells_ingested
-        ),
-        360,
-    )
 }
 
 fn build_brief_line(profile: Option<&MemoryOsProfileReport>) -> String {

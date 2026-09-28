@@ -109,7 +109,7 @@ pub fn build_session_brain(
     )?);
     let focus = build_session_focus(&focus_user_messages, &messages.assistant);
     let effective_project_root = infer_effective_project_root(&project_root, &messages);
-    let user = build_user_context(tracker);
+    let user = build_user_context(tracker, &effective_project_root);
     let mut strategy = build_strategy_context(&effective_project_root).unwrap_or_else(|_| {
         SessionBrainStrategyContext {
             summary: Vec::new(),

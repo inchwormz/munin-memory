@@ -204,35 +204,43 @@ fn project_state(input: ProjectStateInput) -> Result<Value> {
     let limit = validate_limit(input.limit)?;
     let tracker = Tracker::new().context("failed to open Munin history")?;
     let kernel = tracker.get_memory_os_project_kernel(input.project_path.as_deref())?;
-    let mut items = Vec::new();
-    let mut provenance = Vec::new();
+    let mut claims = Vec::new();
     for claim in &kernel.claims {
-        items.push(json!({"kind": "claim", "value": claim}));
-        provenance.push(McpProvenance {
-            source_kind: claim.source_kind.clone(),
-            source_ref: claim.source_event_id.clone(),
-            observed_at: Some(claim.observed_at.clone()),
-        });
+        claims.push((
+            json!({"kind": "claim", "value": claim}),
+            McpProvenance {
+                source_kind: claim.source_kind.clone(),
+                source_ref: claim.source_event_id.clone(),
+                observed_at: Some(claim.observed_at.clone()),
+            },
+        ));
     }
+    let mut open_loops = Vec::new();
     for open_loop in &kernel.open_loops {
-        items.push(json!({"kind": "openLoop", "value": open_loop}));
-        provenance.push(McpProvenance {
-            source_kind: "open-loop".to_string(),
-            source_ref: open_loop.open_loop_id.clone(),
-            observed_at: Some(open_loop.last_seen_at.clone()),
-        });
+        open_loops.push((
+            json!({"kind": "openLoop", "value": open_loop}),
+            McpProvenance {
+                source_kind: "open-loop".to_string(),
+                source_ref: open_loop.open_loop_id.clone(),
+                observed_at: Some(open_loop.last_seen_at.clone()),
+            },
+        ));
     }
+    let mut checkpoints = Vec::new();
     for checkpoint in &kernel.checkpoints {
-        items.push(json!({"kind": "checkpoint", "value": checkpoint}));
-        provenance.push(McpProvenance {
-            source_kind: "checkpoint".to_string(),
-            source_ref: checkpoint.source_event_id.clone(),
-            observed_at: Some(checkpoint.captured_at.clone()),
-        });
+        checkpoints.push((
+            json!({"kind": "checkpoint", "value": checkpoint}),
+            McpProvenance {
+                source_kind: "checkpoint".to_string(),
+                source_ref: checkpoint.source_event_id.clone(),
+                observed_at: Some(checkpoint.captured_at.clone()),
+            },
+        ));
     }
-    let found = items.len();
-    items.truncate(limit);
-    provenance.truncate(limit);
+    let mut ranked = prioritize_project_state(open_loops, claims, checkpoints);
+    let found = ranked.len();
+    ranked.truncate(limit);
+    let (items, provenance): (Vec<_>, Vec<_>) = ranked.into_iter().unzip();
     envelope(
         "project_state",
         provenance,
@@ -246,6 +254,25 @@ fn project_state(input: ProjectStateInput) -> Result<Value> {
             "items": items
         }),
     )
+}
+
+fn prioritize_project_state(
+    mut open_loops: Vec<(Value, McpProvenance)>,
+    mut claims: Vec<(Value, McpProvenance)>,
+    mut checkpoints: Vec<(Value, McpProvenance)>,
+) -> Vec<(Value, McpProvenance)> {
+    // Give the first page one action, one decision, and one checkpoint when
+    // available. A long claim history must not hide the current blocker.
+    let mut ranked = Vec::new();
+    for category in [&mut open_loops, &mut claims, &mut checkpoints] {
+        if !category.is_empty() {
+            ranked.push(category.remove(0));
+        }
+    }
+    ranked.extend(open_loops);
+    ranked.extend(claims);
+    ranked.extend(checkpoints);
+    ranked
 }
 
 fn friction(input: FrictionInput) -> Result<Value> {
@@ -519,6 +546,34 @@ fn redact_strings(value: &mut Value, excerpts: &[String]) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn current_blocker_survives_a_page_of_historical_claims() {
+        let item = |kind: &str, id: usize| {
+            (
+                json!({"kind": kind, "id": id}),
+                McpProvenance {
+                    source_kind: kind.to_string(),
+                    source_ref: format!("{kind}:{id}"),
+                    observed_at: None,
+                },
+            )
+        };
+        let claims = (0..7).map(|id| item("claim", id)).collect();
+        let ranked = prioritize_project_state(
+            vec![item("openLoop", 1)],
+            claims,
+            vec![item("checkpoint", 1)],
+        );
+        let first_page = ranked
+            .iter()
+            .take(5)
+            .map(|entry| &entry.0)
+            .collect::<Vec<_>>();
+        assert!(first_page.iter().any(|value| value["kind"] == "openLoop"));
+        assert!(first_page.iter().any(|value| value["kind"] == "claim"));
+        assert!(first_page.iter().any(|value| value["kind"] == "checkpoint"));
+    }
 
     #[test]
     fn secret_values_are_redacted_and_labeled() {

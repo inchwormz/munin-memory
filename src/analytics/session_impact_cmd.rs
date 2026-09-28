@@ -78,6 +78,7 @@ pub(crate) struct SessionRecord {
     pub(crate) cwd: String,
     pub(crate) started_at: DateTime<Utc>,
     pub(crate) user_prompts: Vec<UserPrompt>,
+    pub(crate) assistant_outcome: Option<String>,
     pub(crate) shells: Vec<ShellExecution>,
 }
 
@@ -774,6 +775,22 @@ pub(crate) fn load_sessions(
     before_cutoff: Option<NaiveDate>,
     source_filter: Option<SessionSource>,
 ) -> Result<Vec<SessionRecord>> {
+    load_sessions_modified_since(
+        project_filter,
+        since_days,
+        before_cutoff,
+        source_filter,
+        None,
+    )
+}
+
+pub(crate) fn load_sessions_modified_since(
+    project_filter: Option<&str>,
+    since_days: Option<u64>,
+    before_cutoff: Option<NaiveDate>,
+    source_filter: Option<SessionSource>,
+    modified_since: Option<std::time::SystemTime>,
+) -> Result<Vec<SessionRecord>> {
     let mut sessions = Vec::new();
 
     match source_filter {
@@ -781,11 +798,13 @@ pub(crate) fn load_sessions(
             project_filter,
             since_days,
             before_cutoff,
+            modified_since,
         )?),
         Some(SessionSource::Codex) => sessions.extend(load_codex_sessions(
             project_filter,
             since_days,
             before_cutoff,
+            modified_since,
         )?),
         Some(SessionSource::Recall) => {}
         None => {
@@ -793,11 +812,13 @@ pub(crate) fn load_sessions(
                 project_filter,
                 since_days,
                 before_cutoff,
+                modified_since,
             )?);
             sessions.extend(load_codex_sessions(
                 project_filter,
                 since_days,
                 before_cutoff,
+                modified_since,
             )?);
         }
     }
@@ -814,6 +835,7 @@ fn load_claude_sessions(
     project_filter: Option<&str>,
     since_days: Option<u64>,
     before_cutoff: Option<NaiveDate>,
+    modified_since: Option<std::time::SystemTime>,
 ) -> Result<Vec<SessionRecord>> {
     let Some(home) = session_home_dir() else {
         return Ok(Vec::new());
@@ -836,6 +858,9 @@ fn load_claude_sessions(
         if path.to_string_lossy().contains("subagents") {
             continue;
         }
+        if !file_modified_since(path, modified_since) {
+            continue;
+        }
 
         if let Some(session) = parse_claude_session(path)? {
             if session_matches_filters(&session, project_filter, since_days, before_cutoff) {
@@ -850,11 +875,14 @@ fn load_codex_sessions(
     project_filter: Option<&str>,
     since_days: Option<u64>,
     before_cutoff: Option<NaiveDate>,
+    modified_since: Option<std::time::SystemTime>,
 ) -> Result<Vec<SessionRecord>> {
     let roots = discover_codex_session_roots()?;
     let mut sessions_by_id: HashMap<String, SessionRecord> = HashMap::new();
 
-    for session in load_codex_history_sessions(project_filter, since_days, before_cutoff)? {
+    for session in
+        load_codex_history_sessions(project_filter, since_days, before_cutoff, modified_since)?
+    {
         sessions_by_id.insert(session.session_id.clone(), session);
     }
 
@@ -878,6 +906,9 @@ fn load_codex_sessions(
             if path.extension().and_then(|ext| ext.to_str()) != Some("jsonl") {
                 continue;
             }
+            if !file_modified_since(path, modified_since) {
+                continue;
+            }
 
             if let Some(session) = parse_codex_session(path)? {
                 if !session_matches_filters(&session, project_filter, since_days, before_cutoff) {
@@ -890,6 +921,10 @@ fn load_codex_sessions(
                         let better = session.shells.len() > existing.shells.len()
                             || (session.shells.len() == existing.shells.len()
                                 && session.user_prompts.len() > existing.user_prompts.len())
+                            || (session.shells.len() == existing.shells.len()
+                                && session.user_prompts.len() == existing.user_prompts.len()
+                                && session.assistant_outcome.is_some()
+                                && existing.assistant_outcome.is_none())
                             || (session.shells.len() == existing.shells.len()
                                 && session.user_prompts.len() == existing.user_prompts.len()
                                 && session.started_at > existing.started_at);
@@ -915,6 +950,7 @@ fn load_codex_history_sessions(
     project_filter: Option<&str>,
     since_days: Option<u64>,
     before_cutoff: Option<NaiveDate>,
+    modified_since: Option<std::time::SystemTime>,
 ) -> Result<Vec<SessionRecord>> {
     let Some(home) = session_home_dir() else {
         return Ok(Vec::new());
@@ -923,8 +959,19 @@ fn load_codex_history_sessions(
     if !history_path.exists() {
         return Ok(Vec::new());
     }
+    if !file_modified_since(&history_path, modified_since) {
+        return Ok(Vec::new());
+    }
 
     load_codex_history_sessions_from_path(&history_path, project_filter, since_days, before_cutoff)
+}
+
+pub(crate) fn file_modified_since(path: &Path, cutoff: Option<std::time::SystemTime>) -> bool {
+    cutoff.is_none_or(|cutoff| {
+        path.metadata()
+            .and_then(|metadata| metadata.modified())
+            .map_or(true, |modified| modified >= cutoff)
+    })
 }
 
 fn load_codex_history_sessions_from_path(
@@ -980,6 +1027,7 @@ fn load_codex_history_sessions_from_path(
                 cwd: String::new(),
                 started_at,
                 user_prompts: Vec::new(),
+                assistant_outcome: None,
                 shells: Vec::new(),
             });
 
@@ -1287,6 +1335,7 @@ fn parse_claude_session(path: &Path) -> Result<Option<SessionRecord>> {
         cwd,
         started_at: started_at.unwrap_or_else(Utc::now),
         user_prompts,
+        assistant_outcome: None,
         shells,
     }))
 }
@@ -1329,6 +1378,7 @@ fn parse_codex_session(path: &Path) -> Result<Option<SessionRecord>> {
     let mut cwd = String::new();
     let mut started_at: Option<DateTime<Utc>> = None;
     let mut user_prompts = Vec::new();
+    let mut assistant_outcome = None;
     let mut shells = Vec::new();
     let mut pending: HashMap<String, CodexPendingCommand> = HashMap::new();
     let mut _is_subagent = false;
@@ -1404,6 +1454,30 @@ fn parse_codex_session(path: &Path) -> Result<Option<SessionRecord>> {
                 let Some(payload) = entry.get("payload") else {
                     continue;
                 };
+                if payload.get("type").and_then(Value::as_str) == Some("message")
+                    && payload.get("role").and_then(Value::as_str) == Some("assistant")
+                    && payload.get("phase").and_then(Value::as_str) == Some("final_answer")
+                {
+                    let text = payload
+                        .get("content")
+                        .and_then(Value::as_array)
+                        .into_iter()
+                        .flatten()
+                        .filter(|part| {
+                            part.get("type").and_then(Value::as_str) == Some("output_text")
+                        })
+                        .filter_map(|part| part.get("text").and_then(Value::as_str))
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                    let compact = text
+                        .split_whitespace()
+                        .take(90)
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                    if !compact.is_empty() {
+                        assistant_outcome = Some(compact);
+                    }
+                }
                 if let Some(text) = extract_codex_user_prompt_from_payload(payload) {
                     if let Some(ts) = timestamp {
                         user_prompts.push(UserPrompt {
@@ -1490,6 +1564,7 @@ fn parse_codex_session(path: &Path) -> Result<Option<SessionRecord>> {
         cwd,
         started_at: started_at.unwrap_or_else(Utc::now),
         user_prompts,
+        assistant_outcome,
         shells,
     }))
 }
@@ -1615,6 +1690,22 @@ mod tests {
     }
 
     #[test]
+    fn incremental_scan_skips_unchanged_files_and_keeps_recent_files() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("session.jsonl");
+        write_lines(&path, &["{}"]);
+        let modified = path.metadata().unwrap().modified().unwrap();
+        assert!(file_modified_since(
+            &path,
+            Some(modified - std::time::Duration::from_secs(1))
+        ));
+        assert!(!file_modified_since(
+            &path,
+            Some(modified + std::time::Duration::from_secs(1))
+        ));
+    }
+
+    #[test]
     fn parses_claude_prompts_and_shells() {
         let dir = TempDir::new().unwrap();
         let path = dir.path().join("session.jsonl");
@@ -1652,6 +1743,7 @@ mod tests {
                 r#"{"timestamp":"2026-04-10T01:00:04Z","type":"event_msg","payload":{"type":"user_message","message":"actually use rg -n"}}"#,
                 r#"{"timestamp":"2026-04-10T01:00:05Z","type":"response_item","payload":{"type":"function_call","name":"shell_command","arguments":"{\"command\":\"rg -n foo .\",\"workdir\":\"C:\\\\repo\"}","call_id":"c2"}}"#,
                 r#"{"timestamp":"2026-04-10T01:00:06Z","type":"response_item","payload":{"type":"function_call_output","call_id":"c2","output":"Exit code: 0\nWall time: 0.2 seconds\nOutput:\nmatch"}}"#,
+                r#"{"timestamp":"2026-04-10T01:00:07Z","type":"response_item","payload":{"type":"message","role":"assistant","phase":"final_answer","content":[{"type":"output_text","text":"Verified: the corrected search found the match. Next: inspect the result."}]}}"#,
             ],
         );
 
@@ -1662,6 +1754,10 @@ mod tests {
         assert_eq!(session.shells.len(), 2);
         assert!(session.shells[0].outcome.is_failure());
         assert!(session.shells[1].outcome.is_success());
+        assert_eq!(
+            session.assistant_outcome.as_deref(),
+            Some("Verified: the corrected search found the match. Next: inspect the result.")
+        );
 
         let subagent_path = dir.path().join("subagent.jsonl");
         write_lines(
@@ -1763,6 +1859,7 @@ mod tests {
                     text: "redirect".to_string(),
                 },
             ],
+            assistant_outcome: None,
             shells: vec![
                 ShellExecution {
                     timestamp: parse_timestamp("2026-04-10T00:00:02Z").unwrap(),

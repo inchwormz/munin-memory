@@ -7,6 +7,6 @@ description: Open the compiled Munin startup brief for this project. Use when st
 
 Run `munin resume --format prompt`.
 
-Treat the result as compiled startup truth, not raw transcript search. Answer from the current project, active work, next step, and watchout sections. If the brief is empty or mismatched, run `munin doctor --scope user --format text` before answering.
+Treat the result as a dated compiled memory snapshot. A last recorded request may already be complete; check the current tree before acting on it. If there is no relevant project memory, say so. Use `munin brain --format prompt` for the live user ask.
 
-Done means the answer names the active project or says none was found, gives one useful next step, and includes one watchout when available.
+Done means the answer names the project, carries forward only applicable preferences or historical context, and gives a current next step only when the evidence supports one.

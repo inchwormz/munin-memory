@@ -246,6 +246,19 @@ fn classify_item(
         return;
     }
 
+    if message.role == "user" {
+        if let Some(goal) = trimmed.strip_prefix("/goal ") {
+            let goal = goal.trim();
+            if !goal.is_empty() {
+                push_evidence(
+                    raw_evidence,
+                    make_evidence(message, goal, 500 + recency, "current_ask", "task"),
+                );
+                return;
+            }
+        }
+    }
+
     if message.role == "assistant" && is_assistant_progress_chatter(trimmed) {
         return;
     }
@@ -1455,6 +1468,22 @@ mod tests {
             text: text.to_string(),
             source_kind: source_kind.to_string(),
         }
+    }
+
+    #[test]
+    fn slash_goal_is_the_live_user_ask() {
+        let user = vec![message(
+            "user",
+            "/goal make Munin useful in our live sessions and remember the user's goals",
+        )];
+        let focus = build_session_focus(&user, &[]);
+        assert_eq!(
+            focus
+                .current_ask_candidates
+                .first()
+                .map(|item| item.summary.as_str()),
+            Some("make Munin useful in our live sessions and remember the user's goals")
+        );
     }
 
     #[test]

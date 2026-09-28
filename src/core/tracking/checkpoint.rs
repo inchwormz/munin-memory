@@ -15,6 +15,156 @@ pub(super) struct MemoryOsCheckpointEnvelope {
 }
 
 impl Tracker {
+    /// A small, conservative user model for live agent context. The full
+    /// profile scans shell history; this reads only recent semantic captures.
+    pub fn get_memory_os_user_preferences_fast(
+        &self,
+        project_path: &str,
+    ) -> Result<Vec<crate::core::memory_os::MemoryOsNarrativeFinding>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT project_path, committed_at, payload_json
+             FROM memory_os_journal_events
+             WHERE event_kind LIKE 'legacy.packet-checkpoint.%'
+               AND payload_json LIKE '%user_work_style%'
+             ORDER BY journal_seq DESC
+             LIMIT 512",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        })?;
+        let mut findings = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        for row in rows {
+            let (source_project, captured_at, payload) = row?;
+            let Ok(capture) =
+                serde_json::from_str::<crate::core::memory_os::MemoryOsCheckpointCapture>(&payload)
+            else {
+                continue;
+            };
+            for item in capture.selected_items {
+                if item.section != "user_work_style"
+                    || !stable_preference(&item.summary, &source_project, project_path)
+                {
+                    continue;
+                }
+                let normalized = item.summary.trim().to_ascii_lowercase();
+                if !seen.insert(normalized) {
+                    continue;
+                }
+                findings.push(crate::core::memory_os::MemoryOsNarrativeFinding {
+                    title: "Working preference".to_string(),
+                    summary: item.summary,
+                    evidence: vec![
+                        format!("checkpoint:{}", capture.packet_id),
+                        format!("observed:{captured_at}"),
+                        format!("project:{source_project}"),
+                    ],
+                });
+                if findings.len() == 3 {
+                    return Ok(findings);
+                }
+            }
+        }
+        Ok(findings)
+    }
+
+    pub fn get_memory_os_recent_project_request_fast(
+        &self,
+        project_path: &str,
+    ) -> Result<Option<crate::core::memory_os::MemoryOsNarrativeFinding>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT committed_at, payload_json
+             FROM memory_os_journal_events
+             WHERE event_kind LIKE 'legacy.packet-checkpoint.%'
+               AND project_path = ?1
+             ORDER BY journal_seq DESC
+             LIMIT 16",
+        )?;
+        let rows = stmt.query_map([project_path], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })?;
+        for row in rows {
+            let (captured_at, payload) = row?;
+            let Ok(capture) =
+                serde_json::from_str::<crate::core::memory_os::MemoryOsCheckpointCapture>(&payload)
+            else {
+                continue;
+            };
+            if capture.profile != "session-onboarding" {
+                continue;
+            }
+            if current_session_capture(&capture.packet_id) {
+                continue;
+            }
+            let Some(goal) = capture.goal.as_deref().map(str::trim) else {
+                continue;
+            };
+            if goal.is_empty() || goal.starts_with('#') || goal.starts_with('<') {
+                continue;
+            }
+            return Ok(Some(crate::core::memory_os::MemoryOsNarrativeFinding {
+                title: "Last recorded request (completion unknown)".to_string(),
+                summary: crate::core::utils::truncate(goal, 240),
+                evidence: vec![
+                    format!("checkpoint:{}", capture.packet_id),
+                    format!("observed:{captured_at}"),
+                ],
+            }));
+        }
+        Ok(None)
+    }
+
+    pub fn get_memory_os_recent_project_outcome_fast(
+        &self,
+        project_path: &str,
+    ) -> Result<Option<crate::core::memory_os::MemoryOsNarrativeFinding>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT committed_at, payload_json
+             FROM memory_os_journal_events
+             WHERE event_kind LIKE 'legacy.packet-checkpoint.%'
+               AND project_path = ?1
+             ORDER BY journal_seq DESC
+             LIMIT 16",
+        )?;
+        let rows = stmt.query_map([project_path], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })?;
+        for row in rows {
+            let (captured_at, payload) = row?;
+            let Ok(capture) =
+                serde_json::from_str::<crate::core::memory_os::MemoryOsCheckpointCapture>(&payload)
+            else {
+                continue;
+            };
+            if capture.profile != "session-onboarding" {
+                continue;
+            }
+            if current_session_capture(&capture.packet_id) {
+                continue;
+            }
+            let Some(outcome) = capture
+                .selected_items
+                .iter()
+                .find(|item| item.kind == "agent-reported-outcome")
+            else {
+                continue;
+            };
+            return Ok(Some(crate::core::memory_os::MemoryOsNarrativeFinding {
+                title: "Agent reported result (unverified)".to_string(),
+                summary: crate::core::utils::truncate(&outcome.summary, 240),
+                evidence: vec![
+                    format!("checkpoint:{}", capture.packet_id),
+                    format!("observed:{captured_at}"),
+                ],
+            }));
+        }
+        Ok(None)
+    }
+
     pub fn record_memory_os_packet_checkpoint(
         &self,
         input: &crate::core::memory_os::MemoryOsCheckpointCapture,
@@ -207,5 +357,218 @@ impl Tracker {
             });
         }
         Ok(checkpoints)
+    }
+}
+
+fn current_session_capture(packet_id: &str) -> bool {
+    std::env::var("CODEX_THREAD_ID")
+        .ok()
+        .is_some_and(|id| packet_id.ends_with(&id))
+}
+
+fn stable_preference(text: &str, source_project: &str, current_project: &str) -> bool {
+    let normalized = text.trim().to_ascii_lowercase();
+    if normalized.len() > 240 || normalized.contains('\n') {
+        return false;
+    }
+    let global = [
+        "i prefer ",
+        "i'd prefer ",
+        "i would prefer ",
+        "i always want ",
+        "i want you to always ",
+    ]
+    .iter()
+    .any(|prefix| normalized.starts_with(prefix));
+    let scoped = source_project.eq_ignore_ascii_case(current_project)
+        && ["i don't want ", "i dont want "]
+            .iter()
+            .any(|prefix| normalized.starts_with(prefix));
+    global || scoped
+}
+
+#[cfg(test)]
+mod startup_tests {
+    use super::{stable_preference, Tracker};
+    use crate::core::memory_os::{
+        MemoryOsCheckpointCapture, MemoryOsCheckpointReentry, MemoryOsCheckpointTelemetry,
+        MemoryOsPacketSelection,
+    };
+    use rusqlite::params;
+
+    #[test]
+    fn only_explicit_applicable_preferences_enter_live_context() {
+        assert!(stable_preference(
+            "I prefer short answers with evidence.",
+            "C:/other",
+            "C:/repo"
+        ));
+        assert!(stable_preference(
+            "I prefer isolated worktrees for risky changes.",
+            "C:/other",
+            "C:/repo"
+        ));
+        assert!(stable_preference(
+            "I don't want this design file editable.",
+            "C:/repo",
+            "C:/repo"
+        ));
+        assert!(!stable_preference(
+            "I don't want this design file editable.",
+            "C:/other",
+            "C:/repo"
+        ));
+        assert!(!stable_preference(
+            "Review the exact commit before approval.",
+            "C:/repo",
+            "C:/repo"
+        ));
+    }
+
+    #[test]
+    fn fast_user_model_keeps_global_and_current_project_preferences_only() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let tracker = Tracker::new_at_path(&tmp.path().join("history.db")).expect("tracker");
+        insert_preference(
+            &tracker,
+            "C:/repo",
+            "I don't want this design file editable.",
+            1,
+        );
+        insert_preference(
+            &tracker,
+            "C:/other",
+            "I don't want another app editable.",
+            2,
+        );
+        insert_preference(
+            &tracker,
+            "C:/other",
+            "I prefer brief evidence-backed answers.",
+            3,
+        );
+
+        let findings = tracker
+            .get_memory_os_user_preferences_fast("C:/repo")
+            .expect("fast preferences");
+        let summaries = findings
+            .iter()
+            .map(|item| item.summary.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(summaries.len(), 2);
+        assert!(summaries.contains(&"I don't want this design file editable."));
+        assert!(summaries.contains(&"I prefer brief evidence-backed answers."));
+        assert!(!summaries.contains(&"I don't want another app editable."));
+    }
+
+    #[test]
+    fn recent_agent_result_is_scoped_and_labeled_unverified() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let tracker = Tracker::new_at_path(&tmp.path().join("history.db")).expect("tracker");
+        insert_item(
+            &tracker,
+            "C:/other",
+            "session_outcome",
+            "agent-reported-outcome",
+            "The unrelated project was deployed.",
+            1,
+        );
+        insert_item(
+            &tracker,
+            "C:/repo",
+            "session_outcome",
+            "agent-reported-outcome",
+            "The requested parser was built locally.",
+            2,
+        );
+        let result = tracker
+            .get_memory_os_recent_project_outcome_fast("C:/repo")
+            .expect("read outcome")
+            .expect("matching outcome");
+        assert_eq!(result.title, "Agent reported result (unverified)");
+        assert_eq!(result.summary, "The requested parser was built locally.");
+        assert!(tracker
+            .get_memory_os_recent_project_outcome_fast("C:/missing")
+            .expect("read missing project")
+            .is_none());
+    }
+
+    fn insert_preference(tracker: &Tracker, project: &str, summary: &str, id: usize) {
+        insert_item(
+            tracker,
+            project,
+            "user_work_style",
+            "working-preference",
+            summary,
+            id,
+        );
+    }
+
+    fn insert_item(
+        tracker: &Tracker,
+        project: &str,
+        section: &str,
+        kind: &str,
+        summary: &str,
+        id: usize,
+    ) {
+        let capture = MemoryOsCheckpointCapture {
+            packet_id: format!("test-{id}"),
+            generated_at: "2026-09-28T00:00:00Z".to_string(),
+            preset: "resume".to_string(),
+            intent: "diagnose".to_string(),
+            profile: "session-onboarding".to_string(),
+            goal: None,
+            budget: 1600,
+            estimated_tokens: 0,
+            estimated_source_tokens: 0,
+            pager_manifest_hash: "hash".to_string(),
+            recall_mode: "off".to_string(),
+            recall_used: false,
+            recall_reason: "test".to_string(),
+            telemetry: MemoryOsCheckpointTelemetry {
+                current_fact_count: 0,
+                recent_change_count: 0,
+                live_claim_count: 0,
+                open_obligation_count: 0,
+                artifact_handle_count: 0,
+                failure_count: 0,
+            },
+            selected_items: vec![MemoryOsPacketSelection {
+                section: section.to_string(),
+                kind: kind.to_string(),
+                summary: summary.to_string(),
+                token_estimate: 10,
+                score: 90,
+                artifact_id: None,
+                subject: None,
+                provenance: vec!["session:test".to_string()],
+            }],
+            exclusions: Vec::new(),
+            reentry: MemoryOsCheckpointReentry {
+                recommended_command: String::new(),
+                current_recommendation: None,
+                first_question: String::new(),
+                first_verification: String::new(),
+            },
+        };
+        tracker
+            .conn
+            .execute(
+                "INSERT INTO memory_os_journal_events (
+                event_id, stream_id, stream_revision, tx_index, occurred_at, committed_at,
+                event_kind, idempotency_key, project_path, scope_json, actor_json,
+                target_refs_json, payload_json, proof_refs_json, schema_fingerprint
+             ) VALUES (?1, ?2, 1, 0, ?3, ?3, 'legacy.packet-checkpoint.test', ?1,
+                       ?4, '{}', '{}', '[]', ?5, '[]', 'test')",
+                params![
+                    format!("event-{id}"),
+                    format!("stream-{id}"),
+                    capture.generated_at,
+                    project,
+                    serde_json::to_string(&capture).expect("payload"),
+                ],
+            )
+            .expect("seed checkpoint");
     }
 }

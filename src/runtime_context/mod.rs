@@ -1,5 +1,5 @@
 use crate::core::memory_os::{
-    MemoryOsBriefReport, MemoryOsInspectionScope, MemoryOsOnboardingState,
+    MemoryOsBriefReport, MemoryOsInspectionScope, MemoryOsNarrativeFinding, MemoryOsOnboardingState,
 };
 use crate::core::tracking::Tracker;
 use crate::session_brain::{SessionBrain, SessionBrainProvider, SessionBrainSignal};
@@ -356,7 +356,11 @@ pub fn packet_from_memory_os_brief(report: &MemoryOsBriefReport) -> RuntimeConte
 pub fn packet_from_startup_bootstrap(
     scope: MemoryOsInspectionScope,
     generated_at: String,
+    project_path: &str,
     onboarding: &MemoryOsOnboardingState,
+    preferences: &[MemoryOsNarrativeFinding],
+    last_request: Option<&MemoryOsNarrativeFinding>,
+    last_outcome: Option<&MemoryOsNarrativeFinding>,
 ) -> RuntimeContextPacketV1 {
     RuntimeContextPacketV1 {
         meta: RuntimeContextMeta {
@@ -366,7 +370,7 @@ pub fn packet_from_startup_bootstrap(
             source_mode: RuntimeContextSourceMode::CompiledStartup,
             provider: RuntimeContextProvider::Unknown,
             session_id: None,
-            project_root: None,
+            project_root: Some(project_path.to_string()),
             transcript_source_path: None,
             transcript_modified_at: None,
         },
@@ -378,19 +382,54 @@ pub fn packet_from_startup_bootstrap(
             shells_ingested: onboarding.shells_ingested,
             onboarding_status: onboarding.status.clone(),
             schema_version: onboarding.schema_version.clone(),
-            what_i_know: vec![format!(
-                "Memory OS has indexed {} sessions and {} shell executions.",
-                onboarding.sessions_processed, onboarding.shells_ingested
+            what_i_know: preferences
+                .iter()
+                .take(2)
+                .map(|item| {
+                    let observed = item
+                        .evidence
+                        .iter()
+                        .find_map(|value| value.strip_prefix("observed:"))
+                        .and_then(|value| value.get(..10))
+                        .unwrap_or("unknown date");
+                    format!("Possible user preference (observed {observed}): {}", item.summary)
+                })
+                .collect(),
+            what_is_active: {
+                let mut history = Vec::new();
+                if let Some(item) = last_request {
+                    let observed = item
+                        .evidence
+                        .iter()
+                        .find_map(|value| value.strip_prefix("observed:"))
+                        .and_then(|value| value.get(..10))
+                        .unwrap_or("unknown date");
+                    history.push(format!(
+                        "Last recorded request on {observed} (completion unknown): {}",
+                        item.summary
+                    ));
+                }
+                if let Some(item) = last_outcome {
+                    let observed = item
+                        .evidence
+                        .iter()
+                        .find_map(|value| value.strip_prefix("observed:"))
+                        .and_then(|value| value.get(..10))
+                        .unwrap_or("unknown date");
+                    history.push(format!(
+                        "Agent reported on {observed} (unverified): {}",
+                        item.summary
+                    ));
+                }
+                history
+            },
+            watchouts: vec![format!(
+                "Compiled sessions last refreshed at {}. Check the current tree before treating historical work as active.",
+                onboarding.completed_at.as_deref().unwrap_or("unknown time")
             )],
-            what_is_active: vec![
-                "Fast startup mode skips the heavyweight full brief; use `munin memory-os brief --format prompt` when the complete Memory OS brief is needed.".to_string(),
-            ],
-            watchouts: vec![
-                "Do not open raw transcripts unless this startup brief and Session Brain are insufficient.".to_string(),
-            ],
             startup_rules: vec![
                 "Use `munin brain --format prompt` for live-session continuity.".to_string(),
-                "Use dedicated Memory OS commands for deeper user profile, friction, or historical recall.".to_string(),
+                "Use topic recall only when the current task needs historical evidence.".to_string(),
             ],
         }),
         live: None,
@@ -423,10 +462,18 @@ pub fn build_current_resume_packet(scope: &str) -> Result<RuntimeContextPacketV1
     let tracker = Tracker::new()?;
     let scope = parse_scope(scope)?;
     let onboarding = tracker.get_memory_os_onboarding_state_fast()?;
+    let project_path = crate::core::utils::current_project_root_string();
+    let preferences = tracker.get_memory_os_user_preferences_fast(&project_path)?;
+    let last_request = tracker.get_memory_os_recent_project_request_fast(&project_path)?;
+    let last_outcome = tracker.get_memory_os_recent_project_outcome_fast(&project_path)?;
     Ok(packet_from_startup_bootstrap(
         scope,
         Utc::now().to_rfc3339(),
+        &project_path,
         &onboarding,
+        &preferences,
+        last_request.as_ref(),
+        last_outcome.as_ref(),
     ))
 }
 
@@ -547,10 +594,9 @@ fn render_prompt(packet: &RuntimeContextPacketV1) -> String {
     }
     if let Some(bootstrap) = &packet.bootstrap {
         lines.push("<startup_bootstrap>".to_string());
-        lines.push(format!(
-            "- onboarding: {} / {} sessions / {} shells",
-            bootstrap.onboarding_status, bootstrap.sessions_processed, bootstrap.shells_ingested
-        ));
+        if bootstrap.what_i_know.is_empty() && bootstrap.what_is_active.is_empty() {
+            lines.push("- No relevant compiled memory was found for this project.".to_string());
+        }
         for item in bootstrap.what_i_know.iter() {
             lines.push(format!("- what_i_know: {}", item));
         }
@@ -828,12 +874,21 @@ mod tests {
         let packet = packet_from_startup_bootstrap(
             MemoryOsInspectionScope::User,
             "2026-04-21T00:00:00Z".to_string(),
+            "C:/munin",
             &onboarding,
+            &[MemoryOsNarrativeFinding {
+                title: "Working preference".to_string(),
+                summary: "I prefer concise evidence.".to_string(),
+                evidence: vec!["session:test".to_string()],
+            }],
+            None,
+            None,
         );
         let rendered = render_packet(&packet, RuntimeContextRenderMode::Prompt).expect("render");
 
         assert_eq!(packet.meta.surface_kind, RuntimeContextSurfaceKind::Resume);
         assert!(rendered.contains("<startup_bootstrap>"));
-        assert!(rendered.contains("100 sessions"));
+        assert!(rendered.contains("I prefer concise evidence"));
+        assert!(!rendered.contains("100 sessions"));
     }
 }

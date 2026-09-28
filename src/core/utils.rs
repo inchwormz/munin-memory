@@ -508,20 +508,33 @@ fn has_project_marker(path: &Path) -> bool {
 /// present, falls back to other common project markers.
 pub fn detect_project_root(path: &Path) -> PathBuf {
     let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    let home = std::env::var_os("USERPROFILE")
+        .or_else(|| std::env::var_os("HOME"))
+        .map(PathBuf::from)
+        .map(|path| path.canonicalize().unwrap_or(path));
+    detect_project_root_with_home(&canonical, home.as_deref())
+}
 
+fn detect_project_root_with_home(canonical: &Path, home: Option<&Path>) -> PathBuf {
     for ancestor in canonical.ancestors() {
+        if home.is_some_and(|home| ancestor == home && ancestor != canonical) {
+            break;
+        }
         if ancestor.join(".git").exists() {
             return ancestor.to_path_buf();
         }
     }
 
     for ancestor in canonical.ancestors() {
+        if home.is_some_and(|home| ancestor == home && ancestor != canonical) {
+            break;
+        }
         if has_project_marker(ancestor) {
             return ancestor.to_path_buf();
         }
     }
 
-    canonical
+    canonical.to_path_buf()
 }
 
 /// Resolve the current working directory to a normalized project root string.
@@ -536,6 +549,24 @@ pub fn current_project_root_string() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn home_marker_does_not_turn_a_child_chat_into_the_home_project() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let home = tmp.path();
+        std::fs::create_dir(home.join(".context")).expect("home marker");
+        let chat = home.join("Documents").join("Codex").join("go");
+        std::fs::create_dir_all(&chat).expect("chat directory");
+        assert_eq!(detect_project_root_with_home(&chat, Some(home)), chat);
+
+        let repo = home.join("Projects").join("repo");
+        std::fs::create_dir_all(repo.join("src")).expect("repo directory");
+        std::fs::create_dir(repo.join(".git")).expect("git marker");
+        assert_eq!(
+            detect_project_root_with_home(&repo.join("src"), Some(home)),
+            repo
+        );
+    }
 
     #[test]
     fn test_truncate_short_string() {

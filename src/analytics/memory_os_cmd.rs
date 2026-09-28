@@ -627,7 +627,21 @@ pub fn run_startup_brief(
     let onboarding = tracker
         .get_memory_os_onboarding_state_fast()
         .context("Failed to load fast Memory OS onboarding state")?;
-    println!("{}", render_fast_startup_brief(scope, &onboarding));
+    let project_path = crate::core::utils::current_project_root_string();
+    let preferences = tracker.get_memory_os_user_preferences_fast(&project_path)?;
+    let last_request = tracker.get_memory_os_recent_project_request_fast(&project_path)?;
+    let last_outcome = tracker.get_memory_os_recent_project_outcome_fast(&project_path)?;
+    println!(
+        "{}",
+        render_fast_startup_brief(
+            scope,
+            &project_path,
+            &onboarding,
+            &preferences,
+            last_request.as_ref(),
+            last_outcome.as_ref()
+        )
+    );
     Ok(())
 }
 
@@ -659,40 +673,75 @@ pub(crate) fn render_brief_with_tracker(
 
 fn render_fast_startup_brief(
     scope: MemoryOsInspectionScope,
+    project_path: &str,
     onboarding: &crate::core::memory_os::MemoryOsOnboardingState,
+    preferences: &[MemoryOsNarrativeFinding],
+    last_request: Option<&MemoryOsNarrativeFinding>,
+    last_outcome: Option<&MemoryOsNarrativeFinding>,
 ) -> String {
     let mut lines = Vec::new();
     lines.push(format!(
-        "<startup_memory_brief scope=\"{}\" generated_at=\"{}\">",
+        "<startup_memory_brief scope=\"{}\" project=\"{}\" generated_at=\"{}\">",
         scope,
+        project_path,
         Utc::now().to_rfc3339()
     ));
     lines.push("<what_i_know>".to_string());
-    lines.push(format!(
-        "- Memory OS has indexed {} sessions.",
-        onboarding.sessions_processed
-    ));
-    lines.push(format!(
-        "- Backfill status: {} (schema {}).",
-        onboarding.status, onboarding.schema_version
-    ));
+    if preferences.is_empty() && last_request.is_none() && last_outcome.is_none() {
+        lines.push("- No relevant compiled memory was found for this project.".to_string());
+    } else {
+        for finding in preferences.iter().take(2) {
+            let observed = finding
+                .evidence
+                .iter()
+                .find_map(|item| item.strip_prefix("observed:"))
+                .and_then(|value| value.get(..10))
+                .unwrap_or("unknown date");
+            lines.push(format!(
+                "- Possible user preference (observed {observed}): {}",
+                display_text(&finding.summary, 200)
+            ));
+        }
+    }
     lines.push("</what_i_know>".to_string());
-    lines.push("<what_is_active>".to_string());
-    lines.push(
-        "- Fast startup mode skips the heavyweight full brief; use `munin memory-os brief --format prompt` when the complete Memory OS brief is needed."
-            .to_string(),
-    );
-    lines.push("</what_is_active>".to_string());
+    lines.push("<project_history>".to_string());
+    if let Some(request) = last_request {
+        let observed = request
+            .evidence
+            .iter()
+            .find_map(|item| item.strip_prefix("observed:"))
+            .and_then(|value| value.get(..10))
+            .unwrap_or("unknown date");
+        lines.push(format!(
+            "- Last recorded request on {observed} (completion unknown): {}",
+            display_text(&request.summary, 240)
+        ));
+    } else {
+        lines.push("- No recorded request for this project.".to_string());
+    }
+    if let Some(outcome) = last_outcome {
+        let observed = outcome
+            .evidence
+            .iter()
+            .find_map(|item| item.strip_prefix("observed:"))
+            .and_then(|value| value.get(..10))
+            .unwrap_or("unknown date");
+        lines.push(format!(
+            "- Agent reported on {observed} (unverified): {}",
+            display_text(&outcome.summary, 240)
+        ));
+    }
+    lines.push("</project_history>".to_string());
     lines.push("<watchouts>".to_string());
-    lines.push(
-        "- Do not open raw transcripts unless this startup brief and Session Brain are insufficient."
-            .to_string(),
-    );
+    if let Some(imported_at) = onboarding.completed_at.as_deref() {
+        lines.push(format!(
+            "- Compiled sessions last refreshed at {imported_at}."
+        ));
+    } else {
+        lines.push("- No completed session import is recorded.".to_string());
+    }
+    lines.push("- Check the current tree before treating historical work as active.".to_string());
     lines.push("</watchouts>".to_string());
-    lines.push("<startup_rules>".to_string());
-    lines.push("- Use `munin brain --format prompt` for live-session continuity.".to_string());
-    lines.push("- Use dedicated Memory OS commands for deeper user profile, friction, or historical recall.".to_string());
-    lines.push("</startup_rules>".to_string());
     lines.push("</startup_memory_brief>".to_string());
     lines.join("\n")
 }
@@ -3951,7 +4000,7 @@ mod tests {
     }
 
     #[test]
-    fn fast_startup_brief_renders_prompt_without_full_report_sections() {
+    fn fast_startup_brief_serves_selected_memory_without_index_chatter() {
         let onboarding = crate::core::memory_os::MemoryOsOnboardingState {
             schema_version: "memory-os-v1".to_string(),
             status: "completed".to_string(),
@@ -3965,12 +4014,36 @@ mod tests {
             journal_event_count: 100,
         };
 
-        let rendered = render_fast_startup_brief(MemoryOsInspectionScope::User, &onboarding);
+        let preference = MemoryOsNarrativeFinding {
+            title: "Working preference".to_string(),
+            summary: "I prefer concise reports with evidence.".to_string(),
+            evidence: vec!["observed:2026-04-22T00:00:00Z".to_string()],
+        };
+        let request = MemoryOsNarrativeFinding {
+            title: "Last recorded request".to_string(),
+            summary: "Finish the Munin retrieval path.".to_string(),
+            evidence: vec!["observed:2026-04-21T00:00:00Z".to_string()],
+        };
+        let outcome = MemoryOsNarrativeFinding {
+            title: "Agent reported result".to_string(),
+            summary: "The CLI now resolves the target project.".to_string(),
+            evidence: vec!["observed:2026-04-21T01:00:00Z".to_string()],
+        };
+        let rendered = render_fast_startup_brief(
+            MemoryOsInspectionScope::User,
+            "C:/munin",
+            &onboarding,
+            &[preference],
+            Some(&request),
+            Some(&outcome),
+        );
 
         assert!(rendered.contains("<startup_memory_brief scope=\"user\""));
-        assert!(rendered.contains("3836 sessions"));
+        assert!(rendered.contains("I prefer concise reports with evidence"));
+        assert!(rendered.contains("completion unknown"));
+        assert!(rendered.contains("Agent reported on 2026-04-21 (unverified)"));
         assert!(!rendered.contains("shell executions"));
-        assert!(rendered.contains("Fast startup mode skips the heavyweight full brief"));
+        assert!(!rendered.contains("3836 sessions"));
     }
 
     #[test]

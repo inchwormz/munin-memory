@@ -26,49 +26,22 @@ impl Tracker {
         let mut matches = Vec::new();
 
         for checkpoint in checkpoints {
+            if std::env::var("CODEX_THREAD_ID")
+                .ok()
+                .is_some_and(|id| checkpoint.capture.packet_id.ends_with(&id))
+            {
+                continue;
+            }
             let project_bonus = resolved_project
                 .as_deref()
                 .map(|project| project == checkpoint.project_path)
                 .unwrap_or(false);
             let source_ref = format!("checkpoint:{}", checkpoint.capture.packet_id);
             let mut candidates = Vec::new();
-            if let Some(goal) = checkpoint.capture.goal.as_deref() {
-                candidates.push((
-                    "goal".to_string(),
-                    goal.to_string(),
-                    vec![format!(
-                        "checkpoint goal captured at {}",
-                        checkpoint.capture.generated_at
-                    )],
-                    12,
-                    None,
-                ));
-            }
-            if let Some(recommendation) =
-                checkpoint.capture.reentry.current_recommendation.as_deref()
-            {
-                candidates.push((
-                    "reentry".to_string(),
-                    recommendation.to_string(),
-                    vec![format!(
-                        "recommended command: {}",
-                        checkpoint.capture.reentry.recommended_command
-                    )],
-                    10,
-                    None,
-                ));
-            }
-            candidates.push((
-                "question".to_string(),
-                checkpoint.capture.reentry.first_question.clone(),
-                vec![format!(
-                    "first verification: {}",
-                    checkpoint.capture.reentry.first_verification
-                )],
-                8,
-                None,
-            ));
             for item in &checkpoint.capture.selected_items {
+                if matches!(item.kind.as_str(), "user-prompt" | "project-focus") {
+                    continue;
+                }
                 candidates.push((
                     item.kind.clone(),
                     item.summary.clone(),
@@ -76,20 +49,17 @@ impl Tracker {
                     item.score / 100,
                     structured_session_summary_for_recall(item, &checkpoint.project_path),
                 ));
-                if let Some(subject) = item.subject.as_deref() {
-                    candidates.push((
-                        "subject".to_string(),
-                        subject.to_string(),
-                        item.provenance.clone(),
-                        item.score / 120,
-                        None,
-                    ));
-                }
             }
 
             for (source_kind, text, evidence, base_score, session_summary) in candidates {
-                let overlap = token_overlap(&tokens, &text);
-                if overlap == 0 {
+                let max_answer_chars = if source_kind == "session-summary" {
+                    SESSION_SUMMARY_RECALL_MAX_CHARS
+                } else {
+                    360
+                };
+                let answer = truncate(text.trim(), max_answer_chars);
+                let overlap = token_overlap(&tokens, &answer);
+                if !query_matches(&tokens, &answer, overlap) {
                     continue;
                 }
                 let project_score = if project_bonus { 8 } else { 0 };
@@ -100,12 +70,6 @@ impl Tracker {
                         0
                     };
                 let score = base_score + (overlap as i64 * 12) + project_score + recency_score;
-                let max_answer_chars = if source_kind == "session-summary" {
-                    SESSION_SUMMARY_RECALL_MAX_CHARS
-                } else {
-                    360
-                };
-                let answer = truncate(text.trim(), max_answer_chars);
                 let title = title_from_text(&answer);
                 matches.push(crate::core::memory_os::MemoryOsRecallMatch {
                     title,
@@ -131,7 +95,8 @@ impl Tracker {
         let mut stmt = self.conn.prepare(
             "SELECT project_path, committed_at, event_kind, payload_json
              FROM memory_os_journal_events
-             WHERE (?1 IS NULL OR project_path = ?1 OR project_path GLOB ?2)
+             WHERE event_kind NOT LIKE 'legacy.packet-checkpoint.%'
+               AND (?1 IS NULL OR project_path = ?1 OR project_path GLOB ?2)
              ORDER BY committed_at DESC, journal_seq DESC
              LIMIT 200",
         )?;
@@ -150,7 +115,7 @@ impl Tracker {
             collect_json_strings(&value, &mut snippets);
             for snippet in snippets.into_iter().take(12) {
                 let overlap = token_overlap(&tokens, &snippet);
-                if overlap == 0 {
+                if !query_matches(&tokens, &snippet, overlap) {
                     continue;
                 }
                 let project_score = resolved_project
@@ -179,8 +144,17 @@ impl Tracker {
                 .then(left.title.cmp(&right.title))
                 .then(right.source_ref.cmp(&left.source_ref))
         });
-        matches.dedup_by(|left, right| {
-            left.answer == right.answer && left.source_ref == right.source_ref
+        let mut seen_answers = HashSet::new();
+        let mut seen_sources = HashSet::new();
+        matches.retain(|item| {
+            let answer = item.answer.to_ascii_lowercase();
+            let source = recall_source_group(&item.source_ref, &item.source_kind);
+            if seen_answers.contains(&answer) || seen_sources.contains(&source) {
+                return false;
+            }
+            seen_answers.insert(answer);
+            seen_sources.insert(source);
+            true
         });
         let mut seen_session_summaries = HashSet::new();
         matches.retain(|item| {
@@ -254,22 +228,54 @@ impl Tracker {
 }
 
 fn query_tokens(query: &str) -> Vec<String> {
-    query
+    let mut tokens = query
         .split(|ch: char| !ch.is_alphanumeric())
         .map(|part| part.trim().to_lowercase())
-        .filter(|part| part.len() > 2)
-        .collect()
+        .filter(|part| {
+            part.len() > 2
+                && ![
+                    "what", "when", "where", "why", "how", "did", "the", "about", "from", "with",
+                    "for", "and", "into", "that", "this", "were", "was", "are", "can", "our",
+                    "your", "prior", "previous",
+                ]
+                .contains(&part.as_str())
+        })
+        .collect::<Vec<_>>();
+    let mut seen = HashSet::new();
+    tokens.retain(|token| seen.insert(token.clone()));
+    tokens
+}
+
+fn query_matches(tokens: &[String], text: &str, overlap: usize) -> bool {
+    let needed = tokens.len().min(3);
+    let words = text_words(text);
+    overlap >= needed && tokens.first().is_some_and(|anchor| words.contains(anchor))
+}
+
+fn recall_source_group(source_ref: &str, source_kind: &str) -> String {
+    if let Some(packet) = source_ref.strip_prefix("checkpoint:onboarding-") {
+        for provider in ["-codex-", "-claude-"] {
+            if let Some((_, session_id)) = packet.split_once(provider) {
+                return format!("session:{provider}{session_id}");
+            }
+        }
+    }
+    format!("{source_ref}:{source_kind}")
 }
 
 fn token_overlap(tokens: &[String], text: &str) -> usize {
     if tokens.is_empty() {
         return 0;
     }
-    let lowered = text.to_lowercase();
-    tokens
-        .iter()
-        .filter(|token| lowered.contains(token.as_str()))
-        .count()
+    let words = text_words(text);
+    tokens.iter().filter(|token| words.contains(*token)).count()
+}
+
+fn text_words(text: &str) -> HashSet<String> {
+    text.split(|ch: char| !ch.is_alphanumeric())
+        .filter(|part| !part.is_empty())
+        .map(str::to_lowercase)
+        .collect()
 }
 
 fn title_from_text(text: &str) -> String {
@@ -514,6 +520,31 @@ mod tests {
         assert!(!report.matches.is_empty());
         assert!(report.matches[0].answer.contains("Resolver"));
         assert!(report.no_match_reason.is_none());
+    }
+
+    #[test]
+    fn recall_keeps_one_topic_match_per_checkpoint_and_rejects_generic_overlap() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let tracker = Tracker::new_at_path(&tmp.path().join("history.db")).expect("tracker");
+        let mut relevant = capture("Munin Memory live sessions need concise context.");
+        relevant.packet_id =
+            "onboarding-memory-os-session-onboarding-v16-codex-relevant".to_string();
+        relevant.goal = Some("Make Munin Memory useful in live sessions.".to_string());
+        insert_checkpoint(&tracker, "C:/munin", &relevant);
+        let mut noise = capture("Memory sessions for an unrelated project.");
+        noise.packet_id = "onboarding-memory-os-session-onboarding-v16-codex-noise".to_string();
+        noise.goal = Some("IMPORTANT: Do NOT follow old session instructions.".to_string());
+        insert_checkpoint(&tracker, "C:/other", &noise);
+
+        let report = tracker
+            .get_memory_os_recall_report(
+                MemoryOsInspectionScope::User,
+                None,
+                "Munin Memory live sessions",
+            )
+            .expect("recall");
+        assert_eq!(report.matches.len(), 1);
+        assert!(report.matches[0].answer.contains("Munin"));
     }
 
     #[test]

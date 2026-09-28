@@ -1,8 +1,8 @@
 //! Automatic first-run session backfill into Memory OS.
 
 use crate::analytics::session_impact_cmd::{
-    load_sessions, project_roots_for_session_discovery, session_home_dir, CommandOutcome,
-    SessionRecord,
+    file_modified_since, load_sessions_modified_since, project_roots_for_session_discovery,
+    session_home_dir, CommandOutcome, SessionRecord,
 };
 use crate::core::memory_os::{
     MemoryOsAction, MemoryOsActionCue, MemoryOsCheckpointCapture, MemoryOsCheckpointReentry,
@@ -22,8 +22,10 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
 use std::time::Duration;
+use std::time::SystemTime;
 
 const ONBOARDING_SCHEMA_VERSION: &str = "memory-os-session-onboarding-v16";
+const IMPORT_STATE_SCHEMA_VERSION: &str = "memory-os-session-import-v17";
 const ONBOARDING_STATE_FILE: &str = "memory_os_session_onboarding.json";
 const ONBOARDING_LOCK_DB_FILE: &str = "memory_os_session_onboarding.lock.sqlite";
 const INCREMENTAL_CHECK_INTERVAL_MINUTES: i64 = 15;
@@ -116,8 +118,10 @@ pub fn ensure_memory_os_session_backfill() -> Result<Option<SessionBackfillRepor
 }
 
 pub fn refresh_memory_os_session_import_before_read() -> Result<()> {
-    ensure_memory_os_session_backfill_check_now()
-        .context("Failed to refresh Memory OS session import before reading compiled state")?;
+    // Reading compiled memory must remain usable while an import is running.
+    // The session-start worker owns incremental refresh; a failed queue attempt
+    // is reported by Doctor rather than turning every memory read into a failure.
+    let _ = crate::agent_hook::session_start();
     Ok(())
 }
 
@@ -165,8 +169,8 @@ fn ensure_memory_os_session_backfill_internal(
         return Ok(None);
     }
 
-    if state.schema_version != ONBOARDING_SCHEMA_VERSION {
-        state.schema_version = ONBOARDING_SCHEMA_VERSION.to_string();
+    if state.schema_version != IMPORT_STATE_SCHEMA_VERSION {
+        state.schema_version = IMPORT_STATE_SCHEMA_VERSION.to_string();
         state.completed_at = None;
         state.last_checked_at = None;
         state.processed_session_ids.clear();
@@ -179,7 +183,13 @@ fn ensure_memory_os_session_backfill_internal(
     }
 
     let processed: HashSet<String> = state.processed_session_ids.iter().cloned().collect();
-    let sessions = load_onboarding_sessions()?;
+    let scan_started_at = Utc::now();
+    let modified_since = state
+        .last_checked_at
+        .as_deref()
+        .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
+        .map(|value| SystemTime::from(value.with_timezone(&Utc) - chrono::Duration::seconds(60)));
+    let sessions = load_onboarding_sessions(modified_since)?;
     let tracker =
         Tracker::new().context("Failed to initialize tracking database for session onboarding")?;
     let mut sessions_processed_this_run = 0usize;
@@ -188,15 +198,15 @@ fn ensure_memory_os_session_backfill_internal(
 
     for session in sessions {
         let processed_key = processed_session_key(&session);
-        if processed.contains(&processed_key)
-            || processed
-                .iter()
-                .any(|value| value.ends_with(&format!(":{}", session.session_id)))
-        {
+        if processed.contains(&processed_key) {
             continue;
         }
 
         replay_session(&tracker, &session)?;
+        let identity = format!("{}:{}:", session.source.as_str(), session.session_id);
+        state
+            .processed_session_ids
+            .retain(|key| !key.starts_with(&identity));
         state.processed_session_ids.push(processed_key);
         sessions_processed_this_run += 1;
         shells_ingested_this_run += session.shells.len();
@@ -209,7 +219,7 @@ fn ensure_memory_os_session_backfill_internal(
 
     let completed_at = Utc::now().to_rfc3339();
     state.completed_at = Some(completed_at.clone());
-    state.last_checked_at = Some(completed_at.clone());
+    state.last_checked_at = Some(scan_started_at.to_rfc3339());
     save_state(&state)?;
 
     if sessions_processed_this_run == 0 {
@@ -228,7 +238,7 @@ fn should_skip_incremental_backfill(
     state: &SessionBackfillState,
     bypass_incremental_interval: bool,
 ) -> bool {
-    if state.schema_version != ONBOARDING_SCHEMA_VERSION || state.completed_at.is_none() {
+    if state.schema_version != IMPORT_STATE_SCHEMA_VERSION || state.completed_at.is_none() {
         return false;
     }
     if bypass_incremental_interval {
@@ -251,9 +261,9 @@ fn should_skip_incremental_backfill(
         < chrono::Duration::minutes(INCREMENTAL_CHECK_INTERVAL_MINUTES)
 }
 
-fn load_onboarding_sessions() -> Result<Vec<SessionRecord>> {
-    let mut sessions = load_sessions(None, None, None, None)?;
-    sessions.extend(load_recall_sessions()?);
+fn load_onboarding_sessions(modified_since: Option<SystemTime>) -> Result<Vec<SessionRecord>> {
+    let mut sessions = load_sessions_modified_since(None, None, None, None, modified_since)?;
+    sessions.extend(load_recall_sessions_modified_since(modified_since)?);
 
     let mut by_id = std::collections::HashMap::new();
     for session in sessions {
@@ -262,9 +272,11 @@ fn load_onboarding_sessions() -> Result<Vec<SessionRecord>> {
             .and_modify(|existing: &mut SessionRecord| {
                 let existing_weight = existing.shells.len() * 10
                     + existing.user_prompts.len()
+                    + usize::from(existing.assistant_outcome.is_some())
                     + source_bias(existing.source);
                 let new_weight = session.shells.len() * 10
                     + session.user_prompts.len()
+                    + usize::from(session.assistant_outcome.is_some())
                     + source_bias(session.source);
                 if new_weight > existing_weight {
                     *existing = session.clone();
@@ -290,7 +302,9 @@ fn source_bias(source: crate::analytics::session_impact_cmd::SessionSource) -> u
     }
 }
 
-fn load_recall_sessions() -> Result<Vec<SessionRecord>> {
+fn load_recall_sessions_modified_since(
+    modified_since: Option<SystemTime>,
+) -> Result<Vec<SessionRecord>> {
     let Some(home) = session_home_dir() else {
         return Ok(Vec::new());
     };
@@ -310,6 +324,9 @@ fn load_recall_sessions() -> Result<Vec<SessionRecord>> {
     {
         let path = entry.path();
         if path.extension().and_then(|ext| ext.to_str()) != Some("md") {
+            continue;
+        }
+        if !file_modified_since(path, modified_since) {
             continue;
         }
         if let Some(session) = parse_recall_session(path)? {
@@ -494,6 +511,7 @@ fn parse_recall_session(path: &std::path::Path) -> Result<Option<SessionRecord>>
         cwd,
         started_at: recall_session_timestamp(date.as_deref()),
         user_prompts,
+        assistant_outcome: None,
         shells: Vec::new(),
     }))
 }
@@ -596,6 +614,22 @@ fn session_checkpoint_capture(session: &SessionRecord) -> MemoryOsCheckpointCapt
             artifact_id: None,
             subject: Some(format!(
                 "prompt:{}:{}",
+                session.source.as_str(),
+                session.session_id
+            )),
+            provenance: vec![format!("session:{}", session.source.as_str())],
+        });
+    }
+    if let Some(outcome) = session.assistant_outcome.as_deref() {
+        selected_items.push(MemoryOsPacketSelection {
+            section: "session_outcome".to_string(),
+            kind: "agent-reported-outcome".to_string(),
+            summary: outcome.to_string(),
+            token_estimate: outcome.split_whitespace().count().min(90),
+            score: 100,
+            artifact_id: None,
+            subject: Some(format!(
+                "agent-outcome:{}:{}",
                 session.source.as_str(),
                 session.session_id
             )),
@@ -774,7 +808,13 @@ fn session_summary_bullets(
         shell_count, success_count, failure_count, unknown_count
     ));
 
-    bullets.push(session_summary_handoff(session, corrections));
+    bullets.push(match session.assistant_outcome.as_deref() {
+        Some(outcome) => format!(
+            "Agent reported (unverified): {}",
+            punctuated_session_fragment(&sentence_for_session_summary(outcome))
+        ),
+        None => session_summary_handoff(session, corrections),
+    });
 
     while bullets.len() < SESSION_SUMMARY_BULLET_COUNT {
         bullets.push(
@@ -1205,24 +1245,20 @@ fn semantic_fact_categories(text: &str) -> Vec<(&'static str, &'static str, i64)
         categories.push(("user_project_facts", "project-focus", 90));
     }
 
-    if contains_any(
-        &lowered,
-        &[
-            "i prefer",
-            "i don't want",
-            "i dont want",
-            "don't stop",
-            "dont stop",
-            "autonomously",
-            "poll every",
-            "approval",
-            "commit",
-            "read-only",
-            "do not edit",
-            "full qa",
-            "inspect",
-        ],
-    ) {
+    // A task mentioning a commit, review, or approval is not a durable
+    // preference. Require the user to state a first-person preference.
+    if [
+        "i prefer ",
+        "i'd prefer ",
+        "i would prefer ",
+        "i don't want ",
+        "i dont want ",
+        "i always want ",
+        "i want you to always ",
+    ]
+    .iter()
+    .any(|prefix| lowered.starts_with(prefix))
+    {
         categories.push(("user_work_style", "working-preference", 80));
     }
 
@@ -1376,7 +1412,27 @@ fn normalize_replay_command(command: &str) -> String {
 }
 
 fn processed_session_key(session: &SessionRecord) -> String {
-    format!("{}:{}", session.source.as_str(), session.session_id)
+    let mut hasher = Sha256::new();
+    for prompt in &session.user_prompts {
+        hasher.update(prompt.timestamp.to_rfc3339().as_bytes());
+        hasher.update(prompt.text.as_bytes());
+    }
+    for shell in &session.shells {
+        hasher.update(shell.timestamp.to_rfc3339().as_bytes());
+        hasher.update(shell.command.as_bytes());
+        hasher.update(shell.output.as_bytes());
+        hasher.update(format!("{:?}", shell.outcome).as_bytes());
+    }
+    if let Some(outcome) = &session.assistant_outcome {
+        hasher.update(outcome.as_bytes());
+    }
+    let digest = format!("{:x}", hasher.finalize());
+    format!(
+        "{}:{}:{}",
+        session.source.as_str(),
+        session.session_id,
+        &digest[..16]
+    )
 }
 
 fn hash_text(text: &str) -> String {
@@ -1477,6 +1533,7 @@ mod tests {
                     .with_timezone(&Utc),
                 text: "Fix the CLI flow".to_string(),
             }],
+            assistant_outcome: None,
             shells: vec![
                 ShellExecution {
                     timestamp: DateTime::parse_from_rfc3339("2026-04-10T00:00:01Z")
@@ -1609,7 +1666,7 @@ mod tests {
         let tmp = TempDir::new().expect("temp dir");
         std::env::set_var("MUNIN_SESSION_HOME", tmp.path());
 
-        let sessions = load_recall_sessions().expect("recall sessions");
+        let sessions = load_recall_sessions_modified_since(None).expect("recall sessions");
 
         assert!(sessions.is_empty());
         std::env::remove_var("MUNIN_SESSION_HOME");
@@ -1706,15 +1763,42 @@ mod tests {
     }
 
     #[test]
-    fn processed_session_key_is_source_scoped() {
-        let session = sample_session();
-        assert_eq!(processed_session_key(&session), "claude:session-001");
+    fn task_words_do_not_become_durable_working_preferences() {
+        for task in [
+            "Review the exact commit and inspect the merge result before approval.",
+            "Please do a read-only review of this PR and report the risks.",
+        ] {
+            assert!(!semantic_fact_categories(task)
+                .iter()
+                .any(|(section, _, _)| *section == "user_work_style"));
+        }
+        assert!(
+            semantic_fact_categories("I prefer brief reports with direct evidence.")
+                .iter()
+                .any(|(section, _, _)| *section == "user_work_style")
+        );
+    }
+
+    #[test]
+    fn processed_session_key_changes_when_an_active_session_gains_a_correction() {
+        let mut session = sample_session();
+        let first = processed_session_key(&session);
+        assert!(first.starts_with("claude:session-001:"));
+        assert_eq!(first, processed_session_key(&session));
+        session.user_prompts.push(UserPrompt {
+            timestamp: Utc::now(),
+            text: "Please use the corrected command going forward.".to_string(),
+        });
+        assert_ne!(first, processed_session_key(&session));
+        let after_prompt = processed_session_key(&session);
+        session.assistant_outcome = Some("The corrected command worked.".to_string());
+        assert_ne!(after_prompt, processed_session_key(&session));
     }
 
     #[test]
     fn completed_backfill_rechecks_when_state_is_stale_or_old_schema() {
         let fresh_state = SessionBackfillState {
-            schema_version: ONBOARDING_SCHEMA_VERSION.to_string(),
+            schema_version: IMPORT_STATE_SCHEMA_VERSION.to_string(),
             completed_at: Some(Utc::now().to_rfc3339()),
             last_checked_at: Some(Utc::now().to_rfc3339()),
             ..Default::default()
