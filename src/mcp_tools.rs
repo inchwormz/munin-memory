@@ -1,6 +1,5 @@
 //! Typed, read-only adapters between Munin read models and MCP tool results.
 
-use crate::analytics::memory_os_cmd;
 use crate::core::memory_os::{MemoryOsCheckpointProjection, MemoryOsInspectionScope};
 use crate::core::strategy::{self, StrategyReadOptions};
 use crate::core::tracking::{scan_memory_os_trust_payload, MemoryOsTrustFindingKind, Tracker};
@@ -312,7 +311,11 @@ fn friction(input: FrictionInput) -> Result<Value> {
         .top_fixes
         .into_iter()
         .chain(report.new_unproven_friction)
-        .filter(|fix| input.include_resolved || !is_resolved_status(&fix.status))
+        .filter(|fix| {
+            input.include_resolved
+                || (!is_resolved_status(&fix.status)
+                    && recent_friction_signal(fix.last_signal_at.as_deref()))
+        })
         .collect::<Vec<_>>();
     fixes.sort_by_key(|fix| std::cmp::Reverse(fix.score));
     let found = fixes.len();
@@ -334,6 +337,15 @@ fn friction(input: FrictionInput) -> Result<Value> {
         limit,
         json!({"scope": scope, "fixes": fixes}),
     )
+}
+
+fn recent_friction_signal(last_signal_at: Option<&str>) -> bool {
+    last_signal_at
+        .and_then(|timestamp| DateTime::parse_from_rfc3339(timestamp).ok())
+        .is_some_and(|timestamp| {
+            Utc::now().signed_duration_since(timestamp.with_timezone(&Utc))
+                <= chrono::Duration::days(45)
+        })
 }
 
 fn strategy_status(input: StrategyStatusInput) -> Result<Value> {
@@ -365,26 +377,43 @@ fn strategy_status(input: StrategyStatusInput) -> Result<Value> {
 fn health(input: HealthInput) -> Result<Value> {
     let scope = parse_scope(input.scope.as_deref(), input.project_path.as_deref())?;
     let tracker = Tracker::new().context("failed to open Munin history")?;
-    let report =
-        memory_os_cmd::build_doctor_report(&tracker, scope, input.project_path.as_deref())?;
-    let found = report.signal_quality.len() + report.top_pipeline_problems.len();
+    let state = tracker.get_memory_os_onboarding_state_fast()?;
+    let status = if state.checkpoint_count == 0 {
+        "empty"
+    } else if state.status == "completed" {
+        "ready"
+    } else {
+        "partial"
+    };
     let provenance = vec![McpProvenance {
         source_kind: "memory-os-onboarding".to_string(),
         source_ref: "compiled-onboarding-state".to_string(),
-        observed_at: report.corpus.latest_import_completed_at.clone(),
+        observed_at: state.completed_at.clone().or(state.started_at.clone()),
     }];
     let mut warnings = Vec::new();
-    if report.overall_status != "pass" {
-        warnings.push(format!("Memory OS health is {}.", report.overall_status));
+    if status == "partial" {
+        warnings
+            .push("Recent context is available; older sessions are still indexing.".to_string());
+    } else if status == "empty" {
+        warnings.push("No compiled session context is available yet.".to_string());
     }
     envelope(
         "health",
         provenance,
         warnings,
-        found,
-        found,
-        found,
-        json!({"health": report}),
+        1,
+        1,
+        1,
+        json!({"health": {
+            "status": status,
+            "scope": scope,
+            "projectPath": input.project_path,
+            "importStatus": state.status,
+            "sessionsProcessed": state.sessions_processed,
+            "checkpointCount": state.checkpoint_count,
+            "journalEventCount": state.journal_event_count,
+            "lastCompletedAt": state.completed_at,
+        }}),
     )
 }
 
@@ -612,6 +641,15 @@ mod tests {
             .expect("current user request");
         assert_eq!(context["goal"], "Build useful live memory");
         assert!(context.get("reentry").is_none());
+    }
+
+    #[test]
+    fn friction_defaults_to_recent_signals() {
+        assert!(recent_friction_signal(Some(&Utc::now().to_rfc3339())));
+        assert!(!recent_friction_signal(Some(
+            &(Utc::now() - chrono::Duration::days(80)).to_rfc3339()
+        )));
+        assert!(!recent_friction_signal(None));
     }
 
     #[test]

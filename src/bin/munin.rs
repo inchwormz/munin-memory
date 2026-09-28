@@ -85,7 +85,7 @@ enum Commands {
         /// Filter evidence to an agent label when available
         #[arg(long)]
         agent: Option<String>,
-        /// Limit to a recent window label such as 30d when available
+        /// Recent window such as 30d; defaults to 45d, or use all for history
         #[arg(long)]
         last: Option<String>,
         /// Inspection scope

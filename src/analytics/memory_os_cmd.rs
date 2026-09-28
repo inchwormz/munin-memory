@@ -401,7 +401,7 @@ pub fn run_recall(
     project_path: Option<&str>,
     query: &str,
     format: &str,
-    _verbose: u8,
+    verbose: u8,
 ) -> Result<()> {
     validate_format(format)?;
     let scope = validate_scope(scope, project_path)?;
@@ -418,7 +418,7 @@ pub fn run_recall(
 
     match format {
         "json" => println!("{}", serde_json::to_string_pretty(&report)?),
-        "text" => render_recall_text(&report),
+        "text" => render_recall_text(&report, verbose),
         _ => unreachable!("format is validated before database access"),
     }
 
@@ -3307,7 +3307,7 @@ fn render_overview_text(report: &MemoryOsOverviewReport) {
     }
 }
 
-fn render_recall_text(report: &crate::core::memory_os::MemoryOsRecallReport) {
+fn render_recall_text(report: &crate::core::memory_os::MemoryOsRecallReport, verbose: u8) {
     println!("Memory OS Recall");
     println!("----------------");
     println!("Scope: {}", report.scope);
@@ -3324,16 +3324,28 @@ fn render_recall_text(report: &crate::core::memory_os::MemoryOsRecallReport) {
         return;
     }
     for (index, item) in report.matches.iter().enumerate() {
-        println!("{}. {}", index + 1, item.title);
-        for line in item.answer.lines() {
-            println!("   {}", line);
+        if item.source_kind == "session-summary" {
+            for (line_index, line) in item.answer.lines().enumerate() {
+                if line_index == 0 {
+                    println!("{}. {}", index + 1, line);
+                } else {
+                    println!("   {}", line);
+                }
+            }
+        } else {
+            println!("{}. {}", index + 1, item.title);
+            for line in item.answer.lines() {
+                println!("   {}", line);
+            }
         }
-        println!("   source: {} ({})", item.source_ref, item.source_kind);
-        if !item.project_path.is_empty() {
-            println!("   project: {}", item.project_path);
-        }
-        for evidence in item.evidence.iter().take(2) {
-            println!("   evidence: {}", evidence);
+        if verbose > 0 {
+            println!("   source: {} ({})", item.source_ref, item.source_kind);
+            if !item.project_path.is_empty() {
+                println!("   project: {}", item.project_path);
+            }
+            for evidence in item.evidence.iter().take(2) {
+                println!("   evidence: {}", evidence);
+            }
         }
     }
 }
@@ -3344,7 +3356,13 @@ fn apply_friction_filters(
     last: Option<&str>,
 ) {
     let agent = agent.map(|value| value.to_lowercase());
-    let since = last.and_then(parse_last_window);
+    let since = match last {
+        Some("all") => None,
+        Some(value) => {
+            parse_last_window(value).or_else(|| Some(Utc::now() - chrono::Duration::days(45)))
+        }
+        None => Some(Utc::now() - chrono::Duration::days(45)),
+    };
     if agent.is_none() && since.is_none() {
         return;
     }
@@ -3953,6 +3971,42 @@ mod tests {
     use tempfile::TempDir;
 
     static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn friction_defaults_to_recent_signals_but_allows_explicit_history() {
+        let fix = |id: &str, at: DateTime<Utc>| MemoryOsFrictionFix {
+            fix_id: id.to_string(),
+            title: id.to_string(),
+            impact: String::new(),
+            status: "active".to_string(),
+            summary: id.to_string(),
+            permanent_fix: String::new(),
+            evidence: Vec::new(),
+            last_signal_at: Some(at.to_rfc3339()),
+            score: 1,
+        };
+        let report = || MemoryOsFrictionReport {
+            generated_at: Utc::now().to_rfc3339(),
+            scope: MemoryOsInspectionScope::User,
+            top_fixes: vec![
+                fix("recent", Utc::now() - chrono::Duration::days(2)),
+                fix("old", Utc::now() - chrono::Duration::days(80)),
+            ],
+            new_unproven_friction: Vec::new(),
+            by_source: Vec::new(),
+            redirects: crate::core::memory_os::MemoryOsRedirectSummary::default(),
+            repeated_corrections: Vec::new(),
+            likely_misunderstandings: Vec::new(),
+            behavior_changes: Vec::new(),
+        };
+        let mut current = report();
+        apply_friction_filters(&mut current, None, None);
+        assert_eq!(current.top_fixes.len(), 1);
+        assert_eq!(current.top_fixes[0].fix_id, "recent");
+        let mut historical = report();
+        apply_friction_filters(&mut historical, None, Some("all"));
+        assert_eq!(historical.top_fixes.len(), 2);
+    }
 
     fn temp_tracker() -> (TempDir, Tracker, std::path::PathBuf) {
         let tmp = TempDir::new().expect("temp dir");

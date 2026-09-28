@@ -277,6 +277,10 @@ fn all_six_tools_return_typed_bounded_read_only_results() {
         "session response: {}",
         messages[2]
     );
+    let health = &messages[6]["result"]["structuredContent"]["data"]["health"];
+    assert_eq!(health["status"], "partial");
+    assert!(health["checkpointCount"].as_u64().unwrap() > 0);
+    assert!(health.get("signalQuality").is_none());
 
     let digest_after = profile_digest(profile.path());
     assert_eq!(digest_after, digest_before, "MCP reads mutated the corpus");
